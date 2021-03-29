@@ -15,6 +15,7 @@
 
 ## Docker常用命令
 ### 帮助命令
+
 ```shell
 docker version #显示docker版本信息
 docker info  #显示docker系统信息
@@ -26,40 +27,46 @@ docker 文档：docs.docker.com/reference
 ### 镜像命令
 ####    docker images
 
-    [root@shenhao /]# docker images
-    REPOSITORY    TAG       IMAGE ID       CREATED       SIZE
-    hello-world   latest    d1165f221234   2 weeks ago   13.3kB
-    redis         latest    f877e80bb9ef   3 weeks ago   105MB
-    mysql         latest    8457e9155715   3 weeks ago   546MB
-    
-    # docker images可选项
-    docker -a,--all   # 列出所有镜像
-    docker -q,--quiet # 只显示镜像id
+```SH
+[root@shenhao /]# docker images
+REPOSITORY    TAG       IMAGE ID       CREATED       SIZE
+hello-world   latest    d1165f221234   2 weeks ago   13.3kB
+redis         latest    f877e80bb9ef   3 weeks ago   105MB
+mysql         latest    8457e9155715   3 weeks ago   546MB
+
+# docker images可选项
+docker -a,--all   # 列出所有镜像
+docker -q,--quiet # 只显示镜像id
+```
 
 ####    docker search
-    [root@shenhao /]# docker search mysql
-    NAME                              DESCRIPTION                                     STARS     OFFICIAL   AUTOMATED
-    mysql                             MySQL is a widely used, open-source relation…   10665     [OK]       
-    mariadb                           MariaDB Server is a high performing open sou…   3997      [OK]   
-    
-    # 可选项
-    --filter=STARS=3000  # 搜索出的镜像的stars大于3000
+```shell
+[root@shenhao /]# docker search mysql
+NAME                              DESCRIPTION                                     STARS     OFFICIAL   AUTOMATED
+mysql                             MySQL is a widely used, open-source relation…   10665     [OK]       
+mariadb                           MariaDB Server is a high performing open sou…   3997      [OK]   
+
+# 可选项
+--filter=STARS=3000  # 搜索出的镜像的stars大于3000
+```
 
 #### docker pull
-    [root@shenhao /]# docker pull --help
-    
-    Usage:  docker pull [OPTIONS] NAME[:TAG|@DIGEST]
-    
-    Pull an image or a repository from a registry
-    
-    Options:
-      -a, --all-tags                Download all tagged images in the repository
-          --disable-content-trust   Skip image verification (default true)
-          --platform string         Set platform if server is multi-platform capable
-      -q, --quiet                   Suppress verbose output
-      
-    不指定版本，默认使用latest
-    docker使用分层下载，可以极大节省内存，共用层就不需要下载
+```shell
+[root@shenhao /]# docker pull --help
+
+Usage:  docker pull [OPTIONS] NAME[:TAG|@DIGEST]
+
+Pull an image or a repository from a registry
+
+Options:
+  -a, --all-tags                Download all tagged images in the repository
+      --disable-content-trust   Skip image verification (default true)
+      --platform string         Set platform if server is multi-platform capable
+  -q, --quiet                   Suppress verbose output
+  
+不指定版本，默认使用latest
+docker使用分层下载，可以极大节省内存，共用层就不需要下载
+```
 
 #### docker rmi 
 ```shell
@@ -112,77 +119,91 @@ docker run [可选参数] image
 
 
 #### docker ps
-    列出正在运行的命令
-    [root@shenhao /]# docker ps --help
-    
-    Usage:  docker ps [OPTIONS]
-    
-    List containers
-    
-    Options:
-      -a, --all             Show all containers (default shows just running)
-      -f, --filter filter   Filter output based on conditions provided
-          --format string   Pretty-print containers using a Go template
-      -n, --last int        Show n last created containers (includes all states) (default -1)
-      -l, --latest          Show the latest created container (includes all states)
-          --no-trunc        Don't truncate output
-      -q, --quiet           Only display container IDs
-      -s, --size            Display total file sizes
-    
-    -a  #列出当前正在运行的命令+带出历史运行过的容器
-    -n=?  #显示最近创建的容器
-    -q      #只显示容器编号
+```shell
+列出正在运行的命令
+[root@shenhao /]# docker ps --help
+
+Usage:  docker ps [OPTIONS]
+
+List containers
+
+Options:
+  -a, --all             Show all containers (default shows just running)
+  -f, --filter filter   Filter output based on conditions provided
+      --format string   Pretty-print containers using a Go template
+  -n, --last int        Show n last created containers (includes all states) (default -1)
+  -l, --latest          Show the latest created container (includes all states)
+      --no-trunc        Don't truncate output
+  -q, --quiet           Only display container IDs
+  -s, --size            Display total file sizes
+
+-a  #列出当前正在运行的命令+带出历史运行过的容器
+-n=?  #显示最近创建的容器
+-q      #只显示容器编号
+```
 
 #### 退出
-    exit    # 直接停止容器并推出
-    ctrl + P + Q     # 容器不停止退出
+```shell
+exit    # 直接停止容器并推出
+ctrl + P + Q     # 容器不停止退出
+```
 
 #### 删除
-    docker rm 容器id                  # 删除指定容器，不能删除正在运行中的容器 
-    docker rm -f $(docker ps -ap)     # 删除所用容器 
-    docker ps -a -q|xargs docker rm   # 删除所有容器
+```shell
+docker rm 容器id                  # 删除指定容器，不能删除正在运行中的容器 
+docker rm -f $(docker ps -ap)     # 删除所用容器 
+docker ps -a -q|xargs docker rm   # 删除所有容器
+```
 
 #### 启动和停止容器
-    docker start    # 启动
-    docker restart  # 重启容器
-    docker stop     #停止
-    docker kill     # 强制停止
+```shell
+docker start    # 启动
+docker restart  # 重启容器
+docker stop     #停止
+docker kill     # 强制停止
+```
 
 ### 常用其他命令
 #### 后台启动容器
-    [root@shenhao ~]# docker run -d centos
-    7edf4e37e20d47e474ba6c46de05574d42e53c457a18b65bd72fdc0d2fe5a49e
-    [root@shenhao ~]# docker ps
-    CONTAINER ID   IMAGE     COMMAND   CREATED   STATUS    PORTS     NAMES
+```shell
+[root@shenhao ~]# docker run -d centos
+7edf4e37e20d47e474ba6c46de05574d42e53c457a18b65bd72fdc0d2fe5a49e
+[root@shenhao ~]# docker ps
+CONTAINER ID   IMAGE     COMMAND   CREATED   STATUS    PORTS     NAMES
+```
 
 
 ​    
 ​    # 常见的坑，docker容器使用后台运行，就必须要有一个前台进程，前台没有应用，就会自动停止
 
 #### 查看日志
-    [root@shenhao ~]# docker logs --help
-    Usage:  docker logs [OPTIONS] CONTAINER
-    Fetch the logs of a container
-    Options:
-          --details        Show extra details provided to logs
-      -f, --follow         Follow log output
-          --since string   Show logs since timestamp (e.g. 2013-01-02T13:23:37Z) or relative (e.g. 42m for 42 minutes)
-      -n, --tail string    Number of lines to show from the end of the logs (default "all")
-      -t, --timestamps     Show timestamps
-          --until string   Show logs before a timestamp (e.g. 2013-01-02T13:23:37Z) or relative (e.g. 42m for 42 minutes)
-          
-    docker logs -f -t --tail 容器id
-    # 显示日志
-    -t          # 显示时间戳
-    -f          # 输出
-    --tail num  # 显示的日志条数
+```shell
+[root@shenhao ~]# docker logs --help
+Usage:  docker logs [OPTIONS] CONTAINER
+Fetch the logs of a container
+Options:
+      --details        Show extra details provided to logs
+  -f, --follow         Follow log output
+      --since string   Show logs since timestamp (e.g. 2013-01-02T13:23:37Z) or relative (e.g. 42m for 42 minutes)
+  -n, --tail string    Number of lines to show from the end of the logs (default "all")
+  -t, --timestamps     Show timestamps
+      --until string   Show logs before a timestamp (e.g. 2013-01-02T13:23:37Z) or relative (e.g. 42m for 42 minutes)
+      
+docker logs -f -t --tail 容器id
+# 显示日志
+-t          # 显示时间戳
+-f          # 输出
+--tail num  # 显示的日志条数
+```
 
 #### 显示容器内部进程信息
-    docker top
-    [root@shenhao ~]# docker top eac419b56757
-    UID                 PID                 PPID                C                   STIME               TTY                 TIME                CMD
-    root                6413                6375                0                   17:02               ?                   00:00:00            /bin/sh -c while true;do echo 666;sleep 1;done
-    root                6889                6413                0                   17:07               ?                   00:00:00            /usr/bin/coreutils --coreutils-prog-shebang=sleep /usr/bin/sleep 1
+```SHELL
+docker top
+[root@shenhao ~]# docker top eac419b56757
+UID                 PID                 PPID                C                   STIME               TTY                 TIME                CMD
+root                6413                6375                0                   17:02               ?                   00:00:00            /bin/sh -c while true;do echo 666;sleep 1;done
+root                6889                6413                0                   17:07               ?                   00:00:00            /usr/bin/coreutils --coreutils-prog-shebang=sleep /usr/bin/sleep 1
+```
 
 #### 查看镜像元数据
 ```shell
@@ -408,54 +429,57 @@ Options:
 ```
 
 
-  
 
 #### 进入当前正在运行的容器
-    # 通常容器都是后台运行，往往需要进入容器，修改一些配置
-    **方式一**
-    [root@shenhao ~]# docker exec --help
-    Usage:  docker exec [OPTIONS] CONTAINER COMMAND [ARG...]
-    Run a command in a running container
-    Options:
-      -d, --detach               Detached mode: run command in the background
-          --detach-keys string   Override the key sequence for detaching a container
-      -e, --env list             Set environment variables
-          --env-file list        Read in a file of environment variables
-      -i, --interactive          Keep STDIN open even if not attached
-          --privileged           Give extended privileges to the command
-      -t, --tty                  Allocate a pseudo-TTY
-      -u, --user string          Username or UID (format: <name|uid>[:<group|gid>])
-      -w, --workdir string       Working directory inside the container
+
+>   docker exec  进入容器后开启一个新的终端，可以在里面操作（常用）
+>   docker attach 进入容器正在执行的终端，不会启动新的终端
+
+```shell
+# 通常容器都是后台运行，往往需要进入容器，修改一些配置
+**方式一**
+[root@shenhao ~]# docker exec --help
+Usage:  docker exec [OPTIONS] CONTAINER COMMAND [ARG...]
+Run a command in a running container
+Options:
+  -d, --detach               Detached mode: run command in the background
+      --detach-keys string   Override the key sequence for detaching a container
+  -e, --env list             Set environment variables
+      --env-file list        Read in a file of environment variables
+  -i, --interactive          Keep STDIN open even if not attached
+      --privileged           Give extended privileges to the command
+  -t, --tty                  Allocate a pseudo-TTY
+  -u, --user string          Username or UID (format: <name|uid>[:<group|gid>])
+  -w, --workdir string       Working directory inside the container
+  
+docker exec -it 容器id /bin/bash
+
+**方式二**
+docker attach 容器id
+```
 
 
-    docker exec -it 容器id /bin/bash
-    
-    **方式二**
-    docker attach 容器id
 
 
-   docker exec  进入容器后开启一个新的终端，可以在里面操作（常用）
-​   docker attach 进入容器正在执行的终端，不会启动新的终端
-
-
-​    
 #### 从容器内拷贝文件到容器外
 
-    docker cp 容器id:容器内路径 目的主机路径
-    
-    [root@shenhao ~]# docker cp --help
-    Usage:  docker cp [OPTIONS] CONTAINER:SRC_PATH DEST_PATH|-
-            docker cp [OPTIONS] SRC_PATH|- CONTAINER:DEST_PATH
-    Copy files/folders between a container and the local filesystem
-    Use '-' as the source to read a tar archive from stdin
-    and extract it to a directory destination in a container.
-    Use '-' as the destination to stream a tar archive of a
-    container source to stdout.
-    Options:
-      -a, --archive       Archive mode (copy all uid/gid information)
-      -L, --follow-link   Always follow symbol link in SRC_PATH
-      
-       # 拷贝是一个手动过程，未来可以使用 -v 卷的技术，可以实现自动同步 /home /home
+```shell
+docker cp 容器id:容器内路径 目的主机路径
+
+[root@shenhao ~]# docker cp --help
+Usage:  docker cp [OPTIONS] CONTAINER:SRC_PATH DEST_PATH|-
+        docker cp [OPTIONS] SRC_PATH|- CONTAINER:DEST_PATH
+Copy files/folders between a container and the local filesystem
+Use '-' as the source to read a tar archive from stdin
+and extract it to a directory destination in a container.
+Use '-' as the destination to stream a tar archive of a
+container source to stdout.
+Options:
+  -a, --archive       Archive mode (copy all uid/gid information)
+  -L, --follow-link   Always follow symbol link in SRC_PATH
+  
+   # 拷贝是一个手动过程，未来可以使用 -v 卷的技术，可以实现自动同步 /home /home
+```
 
 
 ​    ![image-20210328164036720](\img\image-20210328164036720.png)
@@ -567,11 +591,15 @@ root@e1ecd29e64b3:/usr/local/tomcat# cd webapps
 
 #### 什么是portainer
 
-​	Docker图形化界面管理工具，提供一个后台面板供我们使用
+> ​	Docker图形化界面管理工具，提供一个后台面板供我们使用
+
+
 
 ~~~shell
 docker run -d -p 8080:9000 --restart=always -v /var/run/docker.sock:/var/run/docker.sock --privileged=true portainer/portainer
 ~~~
+
+
 
 
 
