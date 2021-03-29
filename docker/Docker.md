@@ -603,7 +603,144 @@ docker run -d -p 8080:9000 --restart=always -v /var/run/docker.sock:/var/run/doc
 
 
 
+## Docker镜像讲解
+
+### 镜像是什么
+
+镜像是一种轻量级，可执行的独立软件包，用来打包软件运行环境和基于运行环境开发的软件。他包含运行某个软件所需的所有内容，包括代码、运行时、库、环境变量和配置文件
+
+所有的应用，直接打包docker镜像，就可以直接运行起来
+
+如何得到镜像
+
+- 远程仓库下载
+- 别人拷贝
+- 自己制作镜像
+
+### Docker镜像加载原理
+
+> UnionFS（联合文件系统）
+
+UnionFs：Union文件系统是一种分层、轻量级并且高性能的文件系统，它支持对文件系统的修改作为一次提交来一层层的叠加，同时将不同目录挂载到同一个虚拟文件系统下（unite serveral directories into a single virtual filesystem）。Union文件系统时Docker镜像的基础。镜像可以通过分层来进行继承，基于基础镜像（没有父镜像），可以制作各种具体的的应用镜像。
+
+特性：一次同时加载多个文件系统，但从外面看来，只能看到一个文件系统，联合加载会把各层文件系统叠加起来，这样最终的文件系统会包含所有底层的文件和目录
+
+
+
+> Docker镜像加载原理
+
+ocker的镜像实际上由一层一层的文件系统组成，这种层级的文件系统UnionFS。
+
+bootfs(boot file system)主要包含bootloader和kernel, bootloader主要是引导加载kernel, Linux刚启动时会加载bootfs文件系统，在Docker镜像的最底层是bootfs。这一层与我们典型的Linux/Unix系统是一样的，包含boot加载器和内核。当boot加载完成之后整个内核就都在内存中了，此时内存的使用权已由bootfs转交给内核，此时系统也会卸载bootfs。
+
+rootfs (root file system) ，在bootfs之上。包含的就是典型 Linux 系统中的 /dev, /proc, /bin, /etc 等标准目录和文件。rootfs就是各种不同的操作系统发行版，比如Ubuntu，Centos等等。
+
+![img](\img\watermark,type_ZmFuZ3poZW5naGVpdGk,shadow_10,text_aHR0cHM6Ly9ibG9nLmNzZG4ubmV0L3lhbnlmMjAxNg==,size_16,color_FFFFFF,t_70)
+
+ 
+
+平时我们安装进虚拟机的CentOS都是好几个G，为什么docker这里才200M？？
+
+对于一个精简的OS，rootfs可以很小，只需要包括最基本的命令、工具和程序库就可以了，因为底层直接用Host的kernel，自己只需要提供 rootfs 就行了。由此可见对于不同的linux发行版, bootfs基本是一致的, rootfs会有差别, 因此不同的发行版可以公用bootfs。
+
+
+### 分层理解
+
+> 分层的镜像
+
+下载镜像时，可以发现是一层一层下载的
+
+![img](\img\watermark,tyasdadpdGk,shadow_10,text_aHR0cHM6Ly9ibG9nLmNzZG4ubmV0L3lhbnlmMjAxNg==,size_16,color_FFFFFF,t_70)
+
+
+
+所有的Docker 镜像都是起始于一个基础的镜像，当进行修改或者增加新的内容的时候，就会创建新的镜像成。 举一个简单的例子，加入CentOS 创建了一个新的镜像，这就是新镜像的第一层；如果在该镜像中添加Python 包，就会在基础镜像上创建第二个镜像层；如果继续添加一个安全补丁，就会去常见第三层镜像
+
+![在这里插入图片描述](\img\watermark,type_ZmFuZ3poZW5naGVpdGk,shadow_10,text_aHR0cHM6Ly9ibG9nLmNzZG4ubmV0L3FxXzM5MzgxNzc1,size_16,color_FFFFFF,t_70)
+
+在添加额外的镜像层的同时，镜像始终保持是当前所有镜像的组合，理解这一点非常重要，下图举例了一个简单的例子，每个镜像层包含3个文件，而镜像包含了来自两个镜像层的6个文件
+
+![在这里插入图片描述](\img\watermark,type_ZmFuZ3poZW5naGVpdGk,shadow_10,text_aHR0cHM6Ly9ibG9nLmNzZG4ubmV0L3d1bGVpMjkyMTYyNTk1Nw==,size_16,color_FFFFFF,t_70)
+
+上图中的镜像层跟之前图中的略有区别，主要目的是便于展示文件。
+下图中展示了一个稍微复杂的三层镜像，在外部看来整个镜像只有6个文件，这是因为最上层中的文件7是文件5的一个更新版本。
+
+![在这里插入图片描述](\img\watermark,type_ZmFuZ3poZW5nasdqweow_10,text_aHR0cHM6Ly9ibG9nLmNzZG4ubmV0L3d1bGVpMjkyMTYyNTk1Nw==,size_16,color_FFFFFF,t_70)
+
+这种情况下，上层镜像层中的文件覆盖了底层镜像层中的文件。这样就使得文件的更新版本作为一个新镜像层添加到镜像当中。
+
+Docker通过存储引擎（新版本采用快照机制）的方式来实现镜像层堆栈，并保证多镜像层对外展示为统一的文件系统。
+
+Linux上可用的存储引擎有AUFS、Overlay2、Device Mapper、Btrfs以及ZFS。顾名思义，每种存储引擎都基于Linux中对应的文件系统或者块设备技术，并且每种存储引擎都有其独有的性能特点。
+
+Docker在Windows上仅支持windowsfiter一种存储引擎，该引擎基于NTFS文件系统之上实现了分层和CoW[1]。
+
+下图展示了与系统显示相同的三层镜像。所有镜像层堆叠并合并，对外提供统一的视图。
+![在这里插入图片描述](\img\watermark,type_ZmFuZ3poZW5naGVpdGk,shadow_10,text_aHR0cHM6Ly9ibG9nLmNzZtryNTk1Nw==,size_16,color_FFFFFF,t_70)
+
+
+
+> 特点
+
+**Docker镜像都只是可读的，当容器启动时，一个新的可写层被加载到镜像的顶部！**
+
+**这一层就是我们通常所说的容器层，容器之下的都叫镜像层**
+
+![在这里插入图片描述](\img\watermark,type_ZmFuZ3poZW5naGVpdGk,shadow_10,text_aHR0cHM6Ly9ibG9nLmNzZG4ubmV0L3d1bGVpoiTk1Nw==,size_16,color_FFFFFF,t_70)
+
+### commit镜像
+
+~~~shell
+docker commit 提交容器为一个新的副本
+
+# 命令和git原理类似
+docker commit -m="提交的信息" -a="作者" 容器ID 目标镜像名[:tag]
+~~~
+
+测试
+
+~~~shell
+[root@wulei wulei]# docker run -d -p 6379:8080 --name tomcat01 tomcat
+05c036135c85d57526a1b637c25d2423d52b2fd4e366acbecdd734c8818cfd71
+[root@wulei wulei]# docker ps
+CONTAINER ID   IMAGE     COMMAND             CREATED         STATUS         PORTS                    NAMES
+100be89194d5   tomcat    "catalina.sh run"   4 seconds ago   Up 3 seconds   0.0.0.0:3366->8080/tcp   tomcat01
+# 进入Tomcat容器
+[root@wulei wulei]# docker exec -it 100be89194d5 /bin/bash
+# 删除 webapps 空文件夹
+root@05c036135c85:/usr/local/tomcat# rmdir webapps
+# 重命名webapps.dist 文件夹为 webapps
+root@05c036135c85:/usr/local/tomcat# mv webapps.dist webapps
+root@05c036135c85:/usr/local/tomcat# cd webapps/
+root@05c036135c85:/usr/local/tomcat/webapps# ls
+ROOT  docs  examples  host-manager  manager
+
+# 以上的步骤做完之后，我以后不想这么麻烦，直接用改好的容器。
+[root@wulei ~]# docker ps
+CONTAINER ID   IMAGE     COMMAND             CREATED        STATUS         PORTS                    NAMES
+100be89194d5   tomcat    "catalina.sh run"   15 hours ago   Up 5 minutes   0.0.0.0:6379->8080/tcp   tomcat01
+# 将我们修改过的容器通过commit提交成一个新的镜像，我们以后就可以使用自己的镜像即可
+[root@wulei ~]# docker commit -a="shen" -m="add webapps app" 100be89194d5 tomcat02:1.0
+sha256:6ad64d57c483c7a9f73e6c6cfa183aa70436a475ce119cc1270ebbc18df6d203
+[root@shenhao ~]# docker images
+REPOSITORY            TAG       IMAGE ID       CREATED          SIZE
+tomcat02              1.0       8e7615fc6ed6   13 seconds ago   654MB
+# 现在只是把它提交到本地，后面会说到提交到仓库
+
+~~~
+
+如果想保存当前容器的状态，就可以通过commit来提交，获得一个镜像。类似虚拟机的快照
+
+
+
+## 容器数据卷
 
 
 
 
+
+## DockerFile
+
+
+
+## Docker网络
