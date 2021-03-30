@@ -735,6 +735,57 @@ tomcat02              1.0       8e7615fc6ed6   13 seconds ago   654MB
 
 ## 容器数据卷
 
+### 什么是容器数据卷
+
+#### docker理念
+
+将应用和环境打包成镜像直接启动！
+
+但是数据如果在容器中，将容器删除，数据就会丢失。因此我们需要将数据持久化
+
+需要容器之间可以有一个数据共享的技术！Docker容器中产生的数据，同步到本地，这就是卷技术（目录的挂载，将容器内的目录，挂载到Linux上面）
+
+![image-20210330224115603](\img\image-20210330224115603.png)
+
+
+
+**容器的持久化和同步操作，容器间也是可以数据共享的**
+
+
+
+### 使用数据卷
+
+> 方式一：直接使用命令来挂载 -v
+
+~~~shell
+docker run -it -v 主机目录:容器目录
+
+# 测试
+[root@shenhao ~]# cd /home/
+[root@shenhao home]# ls
+admin  beiluo
+[root@shenhao home]# docker run -it -v /home/ceshi:/home centos /bin/bash
+
+[root@shenhao ~]# cd /home/
+[root@shenhao home]# ls
+admin  beiluo  ceshi
+
+[root@212532162a87 home]# touch test.java
+[root@shenhao ceshi]# ls
+test.java
+
+~~~
+
+![image-20210330224827799](\img\image-20210330224827799.png)
+
+这是一个双向过程，无论在容器内外修改文件，两边都可看到其变化。
+
+
+
+### 安装MySql
+
+
+
 
 
 
