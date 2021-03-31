@@ -780,13 +780,121 @@ test.java
 
 这是一个双向过程，无论在容器内外修改文件，两边都可看到其变化。
 
-
+不过会占用双倍的存储空间
 
 ### 安装MySql
 
+MySql数据在/data下。
+
+~~~shell
+# 官方命令 首次运行MySql要配置密码
+-e # 表示配置环境
+$ docker run --name some-mysql -e MYSQL_ROOT_PASSWORD=my-secret-pw -d mysql:tag
 
 
 
+-d 后台运行
+-p 端口映射
+-v 数据卷挂载
+-e 环境配置
+--name 容器名字
+[root@shenhao ~]# docker run -d -p 3306:3306 -v /home/mysql/conf:/etc/mysql/conf.d -v /home/mysql/data:/var/lib/mysql -e MYSQL_ROOT_PASSWORD=admin123 --name mysql01 mysql:latest
+
+
+# 注意，如果使用mysql8.0版，注意密码的形式，可使用如下命令修改
+mysql> ALTER USER 'root'@'%' IDENTIFIED WITH mysql_native_password BY '123456';
+
+mysql> ALTER USER 'root'@'localhost' IDENTIFIED WITH mysql_native_password BY '123456';
+
+mysql> FLUSH PRIVILEGES;
+~~~
+
+
+
+### 具名和匿名挂载
+
+~~~shell
+# 匿名挂载
+-v 容器内路径
+
+# docker run -d -P --name nginx01 -v /etc/nginx nginx
+ 
+ //端口映射-p(小写)、-P(大写)区别
+# -p指定要映射的端口，一个指定端口上只可以绑定一个容器
+# P将容器内部开放的网络端口随机映射到宿主机的一个端口上
+
+
+[root@shenhao data]# docker volume --help
+Usage:  docker volume COMMAND
+Manage volumes
+Commands:
+  create      Create a volume
+  inspect     Display detailed information on one or more volumes
+  ls          List volumes
+  prune       Remove all unused local volumes
+  rm          Remove one or more volumes
+Run 'docker volume COMMAND --help' for more information on a command.
+
+
+[root@shenhao data]# docker volume ls
+DRIVER    VOLUME NAME
+local     352d7c96eabbce17534d96861ff35dd1f6e39471f5a63d8d7068cbc94d887ddc
+local     29068fa75992e185aa4721c6fa663209a702d5528374d16a8b875ac7f2be3762
+local     ad44582f0653466e0f8244456b4d263bb333b7750abe73263d7312887d9caaba
+
+# 这种就是匿名挂载，在-v的时候只写了容器内的路径，没有写容器外路径
+
+
+# docker run -d -P --name nginx02 -v Bertram:/etc/nginx nginx
+# docker volume ls
+DRIVER              VOLUME NAME
+.....
+local               Bertram
+
+
+~~~
+
+所有的docker容器内的卷，没有指定目录的情况下都是在 '/var/lib/docker/volumes/xxxx/_data'目录下
+
+这里的默认存储路径修改过的，参考文章**[默认docker默认存储路径](https://blog.csdn.net/chj_1224365967/article/details/109053895)**进行修改
+
+我们通过具名挂载可以方便的找到我们的一个卷，大多数使用的都是具名挂载。
+
+#### 如何确定是具名挂载还是匿名挂载还是指定路径挂载
+
+~~~shell
+-v 容器内路径 # 匿名挂载
+-v 卷名:容器内路径 # 具名挂载
+-v /宿主机路径:容器内路径 # 指定路径挂载
+
+docker run -d -P --name nginx02 -v /etc/nginx nginx                    # 匿名挂载
+docker run -d -P --name nginx02 -v nginxconfig:/etc/nginx nginx        # 卷名
+docker run -d -P --name nginx02 -v /nginxconfig:/etc/nginx nginx       # 目录名
+~~~
+
+拓展
+
+~~~shell
+# 通过 -v 容器内路径，ro rw改变读写权限
+ro readonly  #只读
+rw readwrite #可读可写
+ 
+# 一旦这个设置了容器权限，容器对我们挂载出来的内容就有了限定
+docker run -d -P --name nginx02 -v Bertram:/etc/nginx:ro nginx
+docker run -d -P --name nginx02 -v Bertram:/etc/nginx:rw nginx
+# 只要看到ro就说明这个路径只能通过宿主机来操作，容器内无法操作。
+
+~~~
+
+
+
+
+
+初始Dockerfile
+
+Dockerfile就是用来构建docker镜像的构造文件，就是一段命令脚本
+
+> 方式二：
 
 
 
