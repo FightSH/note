@@ -894,11 +894,340 @@ docker run -d -P --name nginx02 -v Bertram:/etc/nginx:rw nginx
 
 Dockerfile就是用来构建docker镜像的构造文件，就是一段命令脚本
 
-> 方式二：
+通过这个脚本可以生成镜像，镜像是一层一层的。脚本也是一个个的命令，是一层一层的
+
+~~~shell
+# 创建一个dockerfile文件，名字可随意
+# 文件中的内容 指令（大写） 参数
+
+
+FROM centos
+
+VOLUME ["volume01","volume02"]
+
+CMD echo "---end---"
+
+CMD /bin/bash
+
+# 每个命令，就是镜像的一层
+~~~
+
+![image-20210406212955579](\img\image-20210406212955579.png)
+
+![image-20210406213319448](\img\image-20210406213319448.png)
+
+其中的两个目录，就是我们自己挂载的，和外部一定有一个同步的目录（匿名挂载方式）
+
+
+
+![image-20210406213916114](\img\image-20210406213916114.png)
+
+### 数据卷容器
+
+两个mysql同步数据
+
+![image-20210406214114873](\img\image-20210406214114873.png)
+
+
+
+~~~shell
+# 启动多个容器
+docker run -it --name docker01 beiluo/centos:1.0
+docker run -it --name docker02 --volumes-from docker01 beiluo/centos:1.0
+
+[root@ef959e1392ac /]# cd volume01
+[root@ef959e1392ac volume01]# touch docker01
+[root@ef959e1392ac volume01]# ls
+docker01
+
+[root@f0469b0cb9c8 /]# ls
+bin  dev  etc  home  lib  lib64  lost+found  media  mnt  opt  proc  root  run  sbin  srv  sys  tmp  usr  var  volume01  volume02
+[root@f0469b0cb9c8 /]# cd volume01/
+[root@f0469b0cb9c8 volume01]# ls
+docker01
+[root@f0469b0cb9c8 volume01]# 
+
+# docker01就是数据卷容器
+# 通过--volumes-from 就可以达成容器间的数据挂载
+# 数据共享机制，本质还是挂载在宿主机上，如果将宿主机文件删除，则容器中数据也会消失
+
+# 容器之间配置信息的传递，数据卷容器的生命周期一直持续到没有容器使用为止
+~~~
 
 
 
 ## DockerFile
+
+### dockerfile介绍
+
+dockerfile是用来构建docker镜像的文件！命令参数脚本！
+
+构建步骤：
+
+1.便携dockerfile文件
+
+2.docker build 构建成为一个镜像
+
+3.docker run运行镜像
+
+4.docker push 发布镜像
+
+
+
+### dockerfile构建过程
+
+**基础知识：**
+
+1.每个保留关键字（指令）都必须是大写字母
+
+2.执行顺序从上至下
+
+3.# 表示注释
+
+4.每一个指令都会创建提交一个新的镜像层，并提交
+
+![image-20210406222125080](\img\image-20210406222125080.png)
+
+dockerfile是面向开发的，以后发布项目，做镜像，就需要编写dockerfile文件
+
+DockerFile：构建文件，定义了一切步骤，源代码
+
+DockerImages：通过DockerFile构建生产的镜像，最终发布和运行的产品
+
+Docker容器：容器就是镜像运行起来提供服务的
+
+
+
+### DockerFile指令
+
+~~~shell
+FROM		# 基础镜像，一切从此构建
+MAINTAINER  # 镜像是谁写的，姓名+邮箱
+RUN			# 镜像构建时需要执行的命令
+ADD			# 步骤
+WORKDIR 	# 镜像工作目录
+VOLUME		# 挂载目录
+EXPOSE		# 指令暴露端口
+CMD			# 指定这个容器启动时执行的命令,只有最后一个会生效，可被替换
+ENTRYPOINT  # 指定这个容器启动时执行的命令,可以追加命令
+ONBUILD		# 当构建一个被继承 DockerFile 这个时候会运行ONBUILD的命令
+COPY		# 类似ADD，将我们文件拷贝到镜像中
+ENV			# 构建时设置环境命令
+~~~
+
+
+
+![img](\img\e84ae621fe610f9aadb4bdf218f.JPG)
+
+
+
+### 实战测试（centos）
+
+dockerhun中 99%的镜像都是从这个基础镜像 FROM scratch 构建出来的
+
+![image-20210406223326028](\img\image-20210406223326028.png)
+
+
+
+
+
+>  创建一个centos
+
+~~~shell
+# 1.编写dockerfile
+FROM centos
+MAINTAINER beiluo<shenhao189@foxmail.com>
+
+ENV MYPATH /usr/local
+WORKDIR $MYPATH
+
+RUN yum -y install vim
+RUN yum -y install net-tools
+
+EXPOSE 80
+CMD echo $MYPATH
+CMD echo "-----end-----"
+CMD /bin/bash
+
+# 2.通过文件构建镜像
+# 命令 docker build -f dockerfile文件路径 -t 镜像名:[tag]
+
+ [root@shenhao home]# docker build -f mydockerfile-centos -t mycentos:0.1 .
+Sending build context to Docker daemon  190.8MB
+Step 1/10 : FROM centos
+ ---> 300e315adb2f
+Step 2/10 : MAINTAINER beiluo<shenhao189@foxmail.com>
+ ---> Running in 70bb3e6dd7d2
+Removing intermediate container 70bb3e6dd7d2
+ ---> 519e27983630
+Step 3/10 : ENV MYPATH /usr/local
+ ---> Running in cd63c67b4f62
+Removing intermediate container cd63c67b4f62
+ ---> fc46be05beb4
+Step 4/10 : WORKDIR $MYPATH
+ ---> Running in d1fb605a6469
+Removing intermediate container d1fb605a6469
+ ---> 9570b3e051fd
+Step 5/10 : RUN yum -y install vim
+ ---> Running in 2f95fde7e2ab
+CentOS Linux 8 - AppStream                      3.3 MB/s | 6.3 MB     00:01    
+CentOS Linux 8 - BaseOS                         1.9 MB/s | 2.3 MB     00:01    
+CentOS Linux 8 - Extras                         4.9 kB/s | 9.6 kB     00:01    
+Dependencies resolved.
+================================================================================
+ Package             Arch        Version                   Repository      Size
+================================================================================
+Installing:
+ vim-enhanced        x86_64      2:8.0.1763-15.el8         appstream      1.4 M
+Installing dependencies:
+ gpm-libs            x86_64      1.20.7-15.el8             appstream       39 k
+ vim-common          x86_64      2:8.0.1763-15.el8         appstream      6.3 M
+ vim-filesystem      noarch      2:8.0.1763-15.el8         appstream       48 k
+ which               x86_64      2.21-12.el8               baseos          49 k
+
+Transaction Summary
+================================================================================
+Install  5 Packages
+
+Total download size: 7.8 M
+Installed size: 30 M
+Downloading Packages:
+(1/5): gpm-libs-1.20.7-15.el8.x86_64.rpm        793 kB/s |  39 kB     00:00    
+(2/5): vim-filesystem-8.0.1763-15.el8.noarch.rp 1.6 MB/s |  48 kB     00:00    
+(3/5): vim-common-8.0.1763-15.el8.x86_64.rpm     42 MB/s | 6.3 MB     00:00    
+(4/5): vim-enhanced-8.0.1763-15.el8.x86_64.rpm  8.5 MB/s | 1.4 MB     00:00    
+(5/5): which-2.21-12.el8.x86_64.rpm             542 kB/s |  49 kB     00:00    
+--------------------------------------------------------------------------------
+Total                                           1.8 MB/s | 7.8 MB     00:04     
+warning: /var/cache/dnf/appstream-02e86d1c976ab532/packages/gpm-libs-1.20.7-15.el8.x86_64.rpm: Header V3 RSA/SHA256 Signature, key ID 8483c65d: NOKEY
+CentOS Linux 8 - AppStream                      1.6 MB/s | 1.6 kB     00:00    
+Importing GPG key 0x8483C65D:
+ Userid     : "CentOS (CentOS Official Signing Key) <security@centos.org>"
+ Fingerprint: 99DB 70FA E1D7 CE22 7FB6 4882 05B5 55B3 8483 C65D
+ From       : /etc/pki/rpm-gpg/RPM-GPG-KEY-centosofficial
+Key imported successfully
+Running transaction check
+Transaction check succeeded.
+Running transaction test
+Transaction test succeeded.
+Running transaction
+  Preparing        :                                                        1/1 
+  Installing       : which-2.21-12.el8.x86_64                               1/5 
+  Installing       : vim-filesystem-2:8.0.1763-15.el8.noarch                2/5 
+  Installing       : vim-common-2:8.0.1763-15.el8.x86_64                    3/5 
+  Installing       : gpm-libs-1.20.7-15.el8.x86_64                          4/5 
+  Running scriptlet: gpm-libs-1.20.7-15.el8.x86_64                          4/5 
+  Installing       : vim-enhanced-2:8.0.1763-15.el8.x86_64                  5/5 
+  Running scriptlet: vim-enhanced-2:8.0.1763-15.el8.x86_64                  5/5 
+  Running scriptlet: vim-common-2:8.0.1763-15.el8.x86_64                    5/5 
+  Verifying        : gpm-libs-1.20.7-15.el8.x86_64                          1/5 
+  Verifying        : vim-common-2:8.0.1763-15.el8.x86_64                    2/5 
+  Verifying        : vim-enhanced-2:8.0.1763-15.el8.x86_64                  3/5 
+  Verifying        : vim-filesystem-2:8.0.1763-15.el8.noarch                4/5 
+  Verifying        : which-2.21-12.el8.x86_64                               5/5 
+
+Installed:
+  gpm-libs-1.20.7-15.el8.x86_64         vim-common-2:8.0.1763-15.el8.x86_64    
+  vim-enhanced-2:8.0.1763-15.el8.x86_64 vim-filesystem-2:8.0.1763-15.el8.noarch
+  which-2.21-12.el8.x86_64             
+
+Complete!
+Removing intermediate container 2f95fde7e2ab
+ ---> 4985e545c676
+Step 6/10 : RUN yum -y install net-tools
+ ---> Running in 81e2413b3554
+Last metadata expiration check: 0:00:12 ago on Tue Apr  6 14:45:00 2021.
+Dependencies resolved.
+================================================================================
+ Package         Architecture Version                        Repository    Size
+================================================================================
+Installing:
+ net-tools       x86_64       2.0-0.52.20160912git.el8       baseos       322 k
+
+Transaction Summary
+================================================================================
+Install  1 Package
+
+Total download size: 322 k
+Installed size: 942 k
+Downloading Packages:
+net-tools-2.0-0.52.20160912git.el8.x86_64.rpm   2.4 MB/s | 322 kB     00:00    
+--------------------------------------------------------------------------------
+Total                                           412 kB/s | 322 kB     00:00     
+Running transaction check
+Transaction check succeeded.
+Running transaction test
+Transaction test succeeded.
+Running transaction
+  Preparing        :                                                        1/1 
+  Installing       : net-tools-2.0-0.52.20160912git.el8.x86_64              1/1 
+  Running scriptlet: net-tools-2.0-0.52.20160912git.el8.x86_64              1/1 
+  Verifying        : net-tools-2.0-0.52.20160912git.el8.x86_64              1/1 
+
+Installed:
+  net-tools-2.0-0.52.20160912git.el8.x86_64                                     
+
+Complete!
+Removing intermediate container 81e2413b3554
+ ---> 81c9b051c6e0
+Step 7/10 : EXPOSE 80
+ ---> Running in da8f59fc4d56
+Removing intermediate container da8f59fc4d56
+ ---> 21a1d1953c20
+Step 8/10 : CMD echo $MYPATH
+ ---> Running in d598e9931e59
+Removing intermediate container d598e9931e59
+ ---> 2041c6b84d2c
+Step 9/10 : CMD echo "-----end-----"
+ ---> Running in d529a52f3c78
+Removing intermediate container d529a52f3c78
+ ---> 430c4bd2d931
+Step 10/10 : CMD /bin/bash
+ ---> Running in 83a36cd740d8
+Removing intermediate container 83a36cd740d8
+ ---> 597019bfbe8c
+Successfully built 597019bfbe8c
+Successfully tagged mycentos:0.1
+[root@shenhao home]# 
+
+# 3.测试运行会发现vim命令和ifconfig命令都可以使用了
+~~~
+
+
+
+~~~shell
+# 可以通过docker history 命令观察镜像如何构建
+
+[root@shenhao home]# docker history 8457e9155715
+IMAGE          CREATED       CREATED BY                                      SIZE      COMMENT
+8457e9155715   5 weeks ago   /bin/sh -c #(nop)  CMD ["mysqld"]               0B        
+<missing>      5 weeks ago   /bin/sh -c #(nop)  EXPOSE 3306 33060            0B        
+<missing>      5 weeks ago   /bin/sh -c #(nop)  ENTRYPOINT ["docker-entry…   0B        
+<missing>      5 weeks ago   /bin/sh -c ln -s usr/local/bin/docker-entryp…   34B       
+<missing>      5 weeks ago   /bin/sh -c #(nop) COPY file:74c3ab1ae4fa929c…   13.4kB    
+<missing>      8 weeks ago   /bin/sh -c #(nop) COPY dir:2e040acc386ebd23b…   1.12kB    
+<missing>      8 weeks ago   /bin/sh -c #(nop)  VOLUME [/var/lib/mysql]      0B        
+<missing>      8 weeks ago   /bin/sh -c {   echo mysql-community-server m…   411MB     
+<missing>      8 weeks ago   /bin/sh -c echo 'deb http://repo.mysql.com/a…   55B       
+<missing>      8 weeks ago   /bin/sh -c #(nop)  ENV MYSQL_VERSION=8.0.23-…   0B        
+<missing>      8 weeks ago   /bin/sh -c #(nop)  ENV MYSQL_MAJOR=8.0          0B        
+<missing>      8 weeks ago   /bin/sh -c set -ex;  key='A4A9406876FCBD3C45…   2.61kB    
+<missing>      8 weeks ago   /bin/sh -c apt-get update && apt-get install…   52.2MB    
+<missing>      8 weeks ago   /bin/sh -c mkdir /docker-entrypoint-initdb.d    0B        
+<missing>      8 weeks ago   /bin/sh -c set -eux;  savedAptMark="$(apt-ma…   4.17MB    
+<missing>      8 weeks ago   /bin/sh -c #(nop)  ENV GOSU_VERSION=1.12        0B        
+<missing>      8 weeks ago   /bin/sh -c apt-get update && apt-get install…   9.34MB    
+<missing>      8 weeks ago   /bin/sh -c groupadd -r mysql && useradd -r -…   329kB     
+<missing>      8 weeks ago   /bin/sh -c #(nop)  CMD ["bash"]                 0B        
+<missing>      8 weeks ago   /bin/sh -c #(nop) ADD file:d5c41bfaf15180481…   69.2MB    
+[root@shenhao home]# 
+
+
+~~~
+
+
+
+> CMD和ENTRYPOINT的区别
 
 
 
