@@ -1227,8 +1227,73 @@ IMAGE          CREATED       CREATED BY                                      SIZ
 
 
 
-> CMD和ENTRYPOINT的区别
+#### CMD和ENTRYPOINT的区别
+
+> CMD：指定这个容器启动的时候需要执行的命令，但是只有最后一个CMD会生效
+> ENTRYPOINT：指定这个容器启动的时候需要执行的命令，且可以追加命令
 
 
+
+### 实战测试（Tomcat）
+
+1.准备镜像文件tomcat压缩包，jdk压缩包
+
+2.编写Dockerfile文件
+
+3.构建镜像
+
+~~~shell
+FROM centos   # 基本镜像
+MAINTAINER Aut<123@123.com>    # 作者信息
+ 
+COPY readme.txt /usr/local/readme.txt    # 复制readme到容器内部的这个路径
+ 
+ADD /home/dockerfile/jdk-8u11-linux-x64.tar.gz /usr/local/    # ADD 命令会自动解压 将tar包解压到这个路径
+ADD /home/dockerfile/apache-tomcat-9.0.22.tar.gz /usr/local/
+ 
+RUN yum -y install vim    # 安装一些基本命令
+ 
+ENV MYPATH /usr/local     # 设置默认的工作目录
+WORKDIR $MYPATH
+ 
+ENV JAVA_HOME /usr/local/jdk1.8.0_11    # java 环境变量
+ENV CLASSPATH $JAVA_HOME/lib/dt.jar:$JAVA_HOME/lib/toos.jar
+ 
+ENV CATALINA_HOME /usr/local/apache-tomcat-9.0.22    # tomcat 环境变量
+ENV CATALINA_BASH /usr/local/apache-tomcat-9.0.22
+ENV PATH $PATH:$JAVA_HOME/bin:$CATALINA_HOME/lib:$CATALINA_HOME/bin
+ 
+EXPOSE 8080  # 暴露 tomcat 端口
+ 
+CMD /usr/local/apache-tomcat-9.0.22/bin/startup.sh && tail -F /usr/local/apache-tomcat-9.0.22/bin/logs/catalina.out  # 启动 tomcat 可以通过 && 拼接一些参数  tail -F 显示文件新追加的内容
+
+
+
+docker run -d -p 9090:8080 --name testtomcat -v /home/tomcat/test:/usr/local/apache-tomcat-9.0.22/webapps diytomcat
+~~~
+
+
+
+### 发布自己的镜像
+
+> DockerHub
+
+1.注册DockerHub账号
+
+2.本地linux进行登录
+
+3.服务器上提交自己的镜像
+
+4.docker push 
+
+​	提交前可以给自己的镜像增加tag    docker tag   id      作者们/镜像名:版本号
+
+
+
+### 小结
+
+![image-20210407223150165](\img\image-20210407223150165.png)
 
 ## Docker网络
+
+### 理解Docker网络
