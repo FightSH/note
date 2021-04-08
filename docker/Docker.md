@@ -1296,4 +1296,138 @@ docker run -d -p 9090:8080 --name testtomcat -v /home/tomcat/test:/usr/local/apa
 
 ## Docker网络
 
-### 理解Docker网络
+### 理解Docker0网络
+
+~~~shell
+[root@shenhao ~]# ip addr
+1: lo: <LOOPBACK,UP,LOWER_UP> mtu 65536 qdisc noqueue state UNKNOWN qlen 1
+    link/loopback 00:00:00:00:00:00 brd 00:00:00:00:00:00
+    inet 127.0.0.1/8 scope host lo
+       valid_lft forever preferred_lft forever
+2: eth0: <BROADCAST,MULTICAST,UP,LOWER_UP> mtu 1500 qdisc pfifo_fast state UP qlen 1000
+    link/ether 00:16:3e:12:08:39 brd ff:ff:ff:ff:ff:ff
+    inet 172.17.7.217/18 brd 172.17.63.255 scope global dynamic eth0
+       valid_lft 312663611sec preferred_lft 312663611sec
+3: docker0: <NO-CARRIER,BROADCAST,MULTICAST,UP> mtu 1500 qdisc noqueue state DOWN 
+    link/ether 02:42:7e:f5:dc:28 brd ff:ff:ff:ff:ff:ff
+    inet 172.18.0.1/16 brd 172.18.255.255 scope global docker0
+       valid_lft forever preferred_lft forever
+[root@shenhao ~]# 
+
+
+# 分别是本机回环地址，阿里云内网地址，docker0地址
+# 三个网络
+
+# docker是如何处理容器网络访问？
+
+
+[root@shenhao ~]# docker run -d -P --name tomcat01 tomcat
+
+# 查看容器内部网络地址 ip addr
+# 容器启动时会得到一个eth0@if53的IP地址，是docker分配的
+
+[root@shenhao ~]# docker exec -it tomcat01 ip addr
+1: lo: <LOOPBACK,UP,LOWER_UP> mtu 65536 qdisc noqueue state UNKNOWN group default qlen 1
+    link/loopback 00:00:00:00:00:00 brd 00:00:00:00:00:00
+    inet 127.0.0.1/8 scope host lo
+       valid_lft forever preferred_lft forever
+52: eth0@if53: <BROADCAST,MULTICAST,UP,LOWER_UP> mtu 1500 qdisc noqueue state UP group default 
+    link/ether 02:42:ac:12:00:02 brd ff:ff:ff:ff:ff:ff link-netnsid 0
+    inet 172.18.0.2/16 brd 172.18.255.255 scope global eth0
+       valid_lft forever preferred_lft forever
+
+# linux 能否ping通容器内部？
+[root@shenhao ~]# ping 172.18.0.2
+PING 172.18.0.2 (172.18.0.2) 56(84) bytes of data.
+64 bytes from 172.18.0.2: icmp_seq=1 ttl=64 time=0.077 ms
+64 bytes from 172.18.0.2: icmp_seq=2 ttl=64 time=0.070 ms
+64 bytes from 172.18.0.2: icmp_seq=3 ttl=64 time=0.056 ms
+64 bytes from 172.18.0.2: icmp_seq=4 ttl=64 time=0.071 ms
+# linux 可以 ping 通 docker 容器内部
+~~~
+
+> 原理
+
+1. 我们每启动一个 docker 容器，docker就会给docker容器分配一个ip。只有安装了docker，就会有一个docker0网卡，使用了桥接模式，使用的技术是evth-pair技术
+
+再次测试ip addr ，发现多了一个网卡。
+
+~~~ shell
+[root@shenhao ~]# ip addr
+1: lo: <LOOPBACK,UP,LOWER_UP> mtu 65536 qdisc noqueue state UNKNOWN qlen 1
+    link/loopback 00:00:00:00:00:00 brd 00:00:00:00:00:00
+    inet 127.0.0.1/8 scope host lo
+       valid_lft forever preferred_lft forever
+2: eth0: <BROADCAST,MULTICAST,UP,LOWER_UP> mtu 1500 qdisc pfifo_fast state UP qlen 1000
+    link/ether 00:16:3e:12:08:39 brd ff:ff:ff:ff:ff:ff
+    inet 172.17.7.217/18 brd 172.17.63.255 scope global dynamic eth0
+       valid_lft 312662924sec preferred_lft 312662924sec
+3: docker0: <BROADCAST,MULTICAST,UP,LOWER_UP> mtu 1500 qdisc noqueue state UP 
+    link/ether 02:42:7e:f5:dc:28 brd ff:ff:ff:ff:ff:ff
+    inet 172.18.0.1/16 brd 172.18.255.255 scope global docker0
+       valid_lft forever preferred_lft forever
+53: veth30e91af@if52: <BROADCAST,MULTICAST,UP,LOWER_UP> mtu 1500 qdisc noqueue master docker0 state UP 
+    link/ether e6:44:6c:03:a8:fc brd ff:ff:ff:ff:ff:ff link-netnsid 0
+~~~
+
+
+
+​    2.再启动一个容器，会发现又多了一个网卡，并且是对应的
+
+~~~shell
+# evth-pair 就是一堆的虚拟设备接口，他们都是成对出现的，一段连着协议，一段彼此相连
+# 正因为有这个特性，evth-pair 充当一个桥梁，连接各种虚拟网络设备
+# OpenStac，Docker容器之间的连接, OVS的连接,都是使用 evth-pair 技术.
+~~~
+
+
+
+​    3.容器之间是可以 ping 通的
+
+~~~shell
+[root@shenhao ~]# docker exec -it tomcat02 ping 172.18.0.2
+PING 172.18.0.2 (172.18.0.2) 56(84) bytes of data.
+64 bytes from 172.18.0.2: icmp_seq=1 ttl=64 time=0.089 ms
+64 bytes from 172.18.0.2: icmp_seq=2 ttl=64 time=0.098 ms
+64 bytes from 172.18.0.2: icmp_seq=3 ttl=64 time=0.084 ms
+
+~~~
+
+![image-20210408223735399](\img\image-20210408223735399.png)
+
+
+
+所有的容器不指定网络的情况下,都是docker0路由的,docker会给容器分配一个默认的可用ip.
+
+Docker 使用的是Linux的桥接,宿主机中是一个Docker容器的网桥,docker0
+
+Docker中的所有网络接口都是虚拟的,虚拟的转发效率高.
+
+只要容器删除,对应的网桥就没了.
+
+
+
+
+
+### ——Link
+
+~~~shell
+# 通过--link既可以解决网络连通问题
+
+[root@shenhao ~]# docker run -d -P --name tomcat03 --link tomcat02 tomcat
+3f6d29cfc8d92677efa15a02d9ff173af94bcd519f2de0048835ca4194951e3c
+[root@shenhao ~]# docker exec tomcat03 ping tomcat02
+PING tomcat02 (172.17.0.3) 56(84) bytes of data.
+64 bytes from tomcat02 (172.17.0.3): icmp_seq=1 ttl=64 time=0.106 ms
+64 bytes from tomcat02 (172.17.0.3): icmp_seq=2 ttl=64 time=0.045 ms
+
+# tomcat03虽然配置了tomcat02,但是tomcat02没有配置tomcat03所有无法连通
+
+# --link 就是在hosts配置中增加了一个容器ip地址的映射.
+
+# 现在docker已经不建议使用--link，自定义网络,不使用docker0.docker0不支持容器名连接访问.
+~~~
+
+
+
+### 自定义网络
