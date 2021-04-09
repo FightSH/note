@@ -1431,3 +1431,135 @@ PING tomcat02 (172.17.0.3) 56(84) bytes of data.
 
 
 ### 自定义网络
+
+> 查看所有的Docker网络
+>
+> [root@shenhao ~]# docker network ls
+> NETWORK ID     NAME      DRIVER    SCOPE
+> cd4dd4c9c9f0   bridge    bridge    local
+> d4069aed9d55   host      host      local
+> b5e6d5925898   none      null      local
+
+> **网络模式**
+>
+> bridge：桥接模式 docker默认
+>
+> none：不配置网络
+>
+> host：和宿主机共享网络
+>
+> container：容器网络连通（用得少,局限大）
+
+~~~shell
+#直接启动的命令 --net bridge 这个就是默认的docker0
+# docker run -d -P --name tomcat01 tomcat
+# docker run -d -P --name tomcat01 --net bridge tomcat
+ 
+# docker0特点:默认,域名不能访问, --link可以打通连接.
+
+
+# 自定义网络
+#--driver bridge
+#--subnet 192.168.0.0/16
+#--gateway 192.168.0.1
+[root@shenhao ~]# docker network create --driver bridge --subnet 192.168.0.0/16 --gateway 192.168.0.1 mynet
+906fe6dddb1bd8d073dd0eb31ddf85d62f106b65086933a072a6c02f5cd93ec5
+[root@shenhao ~]# docker network ls
+NETWORK ID     NAME      DRIVER    SCOPE
+cd4dd4c9c9f0   bridge    bridge    local
+d4069aed9d55   host      host      local
+906fe6dddb1b   mynet     bridge    local
+b5e6d5925898   none      null      local
+[root@shenhao ~]# docker network inspect mynet
+[
+    {
+        "Name": "mynet",
+        "Id": "906fe6dddb1bd8d073dd0eb31ddf85d62f106b65086933a072a6c02f5cd93ec5",
+        "Created": "2021-04-09T23:10:32.120496555+08:00",
+        "Scope": "local",
+        "Driver": "bridge",
+        "EnableIPv6": false,
+        "IPAM": {
+            "Driver": "default",
+            "Options": {},
+            "Config": [
+                {
+                    "Subnet": "192.168.0.0/16",
+                    "Gateway": "192.168.0.1"
+                }
+            ]
+        },
+        "Internal": false,
+        "Attachable": false,
+        "Ingress": false,
+        "ConfigFrom": {
+            "Network": ""
+        },
+        "ConfigOnly": false,
+        "Containers": {},
+        "Options": {},
+        "Labels": {}
+    }
+]
+
+[root@shenhao ~]# docker run -d -P --name tomcat-net01 --net mynet tomcat
+9e6bce620227c1064bededfb9498a0c71a397b04eb6e3c45381b5d3ca9334d99
+[root@shenhao ~]# docker run -d -P --name tomcat-net02 --net mynet tomcat
+ab92a845a1effda1e2c215f8e726f03360cde3d13ea470eb186101c453625ebe
+[root@shenhao ~]# docker exec -it tomcat-net01 ping tomcat-net02
+PING tomcat-net02 (192.168.0.3) 56(84) bytes of data.
+64 bytes from tomcat-net02.mynet (192.168.0.3): icmp_seq=1 ttl=64 time=0.069 ms
+64 bytes from tomcat-net02.mynet (192.168.0.3): icmp_seq=2 ttl=64 time=0.069 ms
+64 bytes from tomcat-net02.mynet (192.168.0.3): icmp_seq=3 ttl=64 time=0.070 ms
+64 bytes from tomcat-net02.mynet (192.168.0.3): icmp_seq=4 ttl=64 time=0.067 ms
+
+# 现在不使用 --link 也可以通过ping容器名字连接网络.
+
+# 好处：不同的集群使用不同的网络,保证集群是安全和健康的
+~~~
+
+
+
+### 网络连通
+
+~~~shell
+[root@shenhao ~]# docker network connet --help
+
+Usage:  docker network COMMAND
+
+Manage networks
+
+Commands:
+  connect     Connect a container to a network
+  create      Create a network
+  disconnect  Disconnect a container from a network
+  inspect     Display detailed information on one or more networks
+  ls          List networks
+  prune       Remove all unused networks
+  rm          Remove one or more networks
+
+Run 'docker network COMMAND --help' for more information on a command.
+
+
+
+# docker network connect mynet[网络名] tomcat01[容器名]
+# 连通之后就是将容器放到网络下,一个容器两个ip地址.
+# 即对容器增加了一个虚拟网卡，放在指定的网络下
+
+[root@shenhao ~]# docker run -d -P --name tomcat01 tomcat
+123b24933feb4cf9a6db90c2c8a4b7ed3b5621ef7ff7f015bdf55643eacc5d69
+[root@shenhao ~]# docker exec -it tomcat01 ping tomcat-net01
+ping: tomcat-net01: Name or service not known
+[root@shenhao ~]# docker network connect mynet tomcat01
+[root@shenhao ~]# docker exec -it tomcat01 ping tomcat-net01
+PING tomcat-net01 (192.168.0.2) 56(84) bytes of data.
+64 bytes from tomcat-net01.mynet (192.168.0.2): icmp_seq=1 ttl=64 time=0.072 ms
+64 bytes from tomcat-net01.mynet (192.168.0.2): icmp_seq=2 ttl=64 time=0.082 ms
+64 bytes from tomcat-net01.mynet (192.168.0.2): icmp_seq=3 ttl=64 time=0.073 ms
+64 bytes from tomcat-net01.mynet (192.168.0.2): icmp_seq=4 ttl=64 time=0.072 ms
+
+~~~
+
+
+
+### 实战：部署redis集群
