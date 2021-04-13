@@ -1,11 +1,11 @@
-## Docker名词概念
+# Docker名词概念
 
     镜像images：
 
 
 ​    
-​    
-### 底层原理
+
+# 底层原理
 ---
 
 #####     Docker是怎么工作的？
@@ -13,7 +13,7 @@
     DockerServer接收到Docker-Client的指令，就会执行这个命令
 
 
-## Docker常用命令
+# Docker常用命令
 ### 帮助命令
 
 ```shell
@@ -581,7 +581,7 @@ root@e1ecd29e64b3:/usr/local/tomcat# cd webapps
 
 
 
-## Docker可视化工具
+# Docker可视化工具
 
 - portainer
 
@@ -603,7 +603,7 @@ docker run -d -p 8080:9000 --restart=always -v /var/run/docker.sock:/var/run/doc
 
 
 
-## Docker镜像讲解
+# Docker镜像讲解
 
 ### 镜像是什么
 
@@ -733,7 +733,7 @@ tomcat02              1.0       8e7615fc6ed6   13 seconds ago   654MB
 
 
 
-## 容器数据卷
+# 容器数据卷
 
 ### 什么是容器数据卷
 
@@ -956,7 +956,7 @@ docker01
 
 
 
-## DockerFile
+# DockerFile
 
 ### dockerfile介绍
 
@@ -1294,7 +1294,7 @@ docker run -d -p 9090:8080 --name testtomcat -v /home/tomcat/test:/usr/local/apa
 
 ![image-20210407223150165](\img\image-20210407223150165.png)
 
-## Docker网络
+# Docker网络
 
 ### 理解Docker0网络
 
@@ -1563,3 +1563,146 @@ PING tomcat-net01 (192.168.0.2) 56(84) bytes of data.
 
 
 ### 实战：部署redis集群
+
+
+
+![image-20210413222550607](\img\image-20210413222550607.png)
+
+
+
+> shell脚本
+
+~~~shell
+# 创建网卡
+docker network create redis --subnet 172.38.0.0/16 
+
+# 通过脚本创建6个redis设置
+for port in $(seq 1 6); \
+do \
+mkdir -p /mydata/redis/node-${port}/conf
+touch /mydata/redis/node-${port}/conf/redis.conf
+cat << EOF >/mydata/redis/node-${port}/conf/redis.conf
+port 6379 
+bind 0.0.0.0
+cluster-enabled yes 
+cluster-config-file nodes.conf
+cluster-node-timeout 5000
+cluster-announce-ip 172.38.0.1${port}
+cluster-announce-port 6379
+cluster-announce-bus-port 16379
+appendonly yes
+EOF
+done
+
+# 启动容器
+# 节点1
+docker run -p 6371:6379 -p 16371:16379 --name redis-1 \
+    -v /mydata/redis/node-1/data:/data \
+    -v /mydata/redis/node-1/conf/redis.conf:/etc/redis/redis.conf \
+    -d --net redis --ip 172.38.0.11 redis:5.0.9-alpine3.11 redis-server /etc/redis/redis.conf
+
+# 节点2 
+docker run -p 6372:6379 -p 16372:16379 --name redis-2 \
+ -v /mydata/redis/node-2/data:/data \
+ -v /mydata/redis/node-2/conf/redis.conf:/etc/redis/redis.conf \
+ -d --net redis --ip 172.38.0.12 redis:5.0.9-alpine3.11 redis-server /etc/redis/redis.conf
+
+...
+
+# 节点6
+docker run -p 6376:6379 -p 16376:16379 --name redis-6 \
+ -v /mydata/redis/node-6/data:/data \
+ -v /mydata/redis/node-6/conf/redis.conf:/etc/redis/redis.conf \
+ -d --net redis --ip 172.38.0.16 redis:5.0.9-alpine3.11 redis-server /etc/redis/redis.conf
+
+
+
+# 创建集群
+[root@shenhao conf]# docker exec -it redis-1 /bin/sh
+/data # ls
+appendonly.aof  nodes.conf
+/data # redis-cli --cluster create 172.38.0.11:6379 172.38.0.12:6379 172.38.0.13:6379 172.38.0.14:6379 172.38.0.15:6379 172.38.0.16:6379 --cluster-replicas 1
+>>> Performing hash slots allocation on 6 nodes...
+Master[0] -> Slots 0 - 5460
+Master[1] -> Slots 5461 - 10922
+Master[2] -> Slots 10923 - 16383
+Adding replica 172.38.0.15:6379 to 172.38.0.11:6379
+Adding replica 172.38.0.16:6379 to 172.38.0.12:6379
+Adding replica 172.38.0.14:6379 to 172.38.0.13:6379
+M: 27fdd5f113fadc12448032c0caa83bc541fd9763 172.38.0.11:6379
+   slots:[0-5460] (5461 slots) master
+M: 5f060e4b39a988fcdc18a198da87bb5501e3a32a 172.38.0.12:6379
+   slots:[5461-10922] (5462 slots) master
+M: f6c642cd597d65629cc4be1d2289666b19606196 172.38.0.13:6379
+   slots:[10923-16383] (5461 slots) master
+S: 2289c2d3e99ac8c792a63f35ad5e525ddffc248f 172.38.0.14:6379
+   replicates f6c642cd597d65629cc4be1d2289666b19606196
+S: 967af8fed19bb4f5301712dc210a4a988921b062 172.38.0.15:6379
+   replicates 27fdd5f113fadc12448032c0caa83bc541fd9763
+S: 075ef90d86f1fed19662e638f0e81d3f00d1132d 172.38.0.16:6379
+   replicates 5f060e4b39a988fcdc18a198da87bb5501e3a32a
+Can I set the above configuration? (type 'yes' to accept): yes
+>>> Nodes configuration updated
+>>> Assign a different config epoch to each node
+>>> Sending CLUSTER MEET messages to join the cluster
+Waiting for the cluster to join
+.....
+>>> Performing Cluster Check (using node 172.38.0.11:6379)
+M: 27fdd5f113fadc12448032c0caa83bc541fd9763 172.38.0.11:6379
+   slots:[0-5460] (5461 slots) master
+   1 additional replica(s)
+S: 2289c2d3e99ac8c792a63f35ad5e525ddffc248f 172.38.0.14:6379
+   slots: (0 slots) slave
+   replicates f6c642cd597d65629cc4be1d2289666b19606196
+M: f6c642cd597d65629cc4be1d2289666b19606196 172.38.0.13:6379
+   slots:[10923-16383] (5461 slots) master
+   1 additional replica(s)
+S: 075ef90d86f1fed19662e638f0e81d3f00d1132d 172.38.0.16:6379
+   slots: (0 slots) slave
+   replicates 5f060e4b39a988fcdc18a198da87bb5501e3a32a
+S: 967af8fed19bb4f5301712dc210a4a988921b062 172.38.0.15:6379
+   slots: (0 slots) slave
+   replicates 27fdd5f113fadc12448032c0caa83bc541fd9763
+M: 5f060e4b39a988fcdc18a198da87bb5501e3a32a 172.38.0.12:6379
+   slots:[5461-10922] (5462 slots) master
+   1 additional replica(s)
+[OK] All nodes agree about slots configuration.
+>>> Check for open slots...
+>>> Check slots coverage...
+[OK] All 16384 slots covered.
+
+/data # redis-cli -c
+127.0.0.1:6379> cluster info
+cluster_state:ok
+cluster_slots_assigned:16384
+cluster_slots_ok:16384
+cluster_slots_pfail:0
+cluster_slots_fail:0
+cluster_known_nodes:6
+cluster_size:3
+cluster_current_epoch:6
+cluster_my_epoch:1
+cluster_stats_messages_ping_sent:156
+cluster_stats_messages_pong_sent:156
+cluster_stats_messages_sent:312
+cluster_stats_messages_ping_received:151
+cluster_stats_messages_pong_received:156
+cluster_stats_messages_meet_received:5
+cluster_stats_messages_received:312
+127.0.0.1:6379> cluster nodes
+27fdd5f113fadc12448032c0caa83bc541fd9763 172.38.0.11:6379@16379 myself,master - 0 1618325812000 1 connected 0-5460
+2289c2d3e99ac8c792a63f35ad5e525ddffc248f 172.38.0.14:6379@16379 slave f6c642cd597d65629cc4be1d2289666b19606196 0 1618325813000 4 connected
+f6c642cd597d65629cc4be1d2289666b19606196 172.38.0.13:6379@16379 master - 0 1618325813579 3 connected 10923-16383
+075ef90d86f1fed19662e638f0e81d3f00d1132d 172.38.0.16:6379@16379 slave 5f060e4b39a988fcdc18a198da87bb5501e3a32a 0 1618325813579 6 connected
+967af8fed19bb4f5301712dc210a4a988921b062 172.38.0.15:6379@16379 slave 27fdd5f113fadc12448032c0caa83bc541fd9763 0 1618325813078 5 connected
+5f060e4b39a988fcdc18a198da87bb5501e3a32a 172.38.0.12:6379@16379 master - 0 1618325812000 2 connected 5461-10922
+127.0.0.1:6379> 
+~~~
+
+### SpringBoot打包镜像
+
+- 架构SpringBoot项目
+- 打包应用
+- 编写DockerFile
+- 构建镜像
+- 发布运行
