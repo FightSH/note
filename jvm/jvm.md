@@ -1,3 +1,23 @@
+# 类加载
+
+
+
+
+
+# 垃圾回收器
+
+
+
+# Young GC与Full GC
+
+
+
+
+
+# 案例
+
+
+
 # [HotSpot JVM内存管理(译文)](https://www.javadoop.com/post/jvm-memory-management)
 
 本节内容基本都是复制粘贴
