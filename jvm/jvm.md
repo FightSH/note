@@ -183,9 +183,27 @@ G1新生代有survivor和eden区，触发机制都是类似的。当新生代达
 
 #### 最终标记阶段
 
-此阶段进入“stop the world”，会根据并发标记阶段记录的那些对象修改，最终标记一下有那些对象存活，那些对象是垃圾对象
+此阶段进入“stop the world”，会根据并发标记阶段记录的那些对象修改，最终标记一下有那些对象存活，那些对象是垃圾对象。
 
 #### 混合回收阶段
+
+计算老年代中每个Region中的存活对象数量，存活对象占比，以及执行垃圾回收的预期性能和效率。接着会停止系统程序，此时会根据设置的最大停顿时间，去选择部分Region进行回收
+
+
+
+**注意：当老年代对堆内存占比达到45%时，触发的是混合回收。此时不仅回收老年代，还会回收新生代以及大对象。回收选择的Region也是有G1进行自动的选择（满足最大停顿时间）**
+
+### G1垃圾回收器的一些参数
+
+"-XX:G1MixedGCCountTarget"：在一次混合回收中，最后一个阶段执行几次混合回收，默认值为8。这意味着最后一个阶段回收过程中，先停止系统运行，混合回收一些Region，再恢复系统运行，再接着进行系统运行，继续进行回收，反复8次。这样可以尽可能的让系统不会停顿时间过长，可以在多次回收的间隙，也可运行。
+
+"-XX:G1HeapWastePercent"：默认值为5%。在混合回收过程中，一旦空闲出来的Region达到堆内存的5%，此时就会立即停止混合回收。在回收过程中，对Region的回收时基于复制算法进行的，是要把回收的Region里的对象放入其他Region，然后将Region中的垃圾对象全部清理掉。
+
+"-XX:G1MixedGCLiveThresholdPercent"，默认值是85%，意思是存活对象低于85%的Region才可以进行回收。
+
+### 其他
+
+进行Mixed回收的时候，无论是老年代还是新生代都是基于复制算法进行回收，都要把各个Region的存活对象拷贝到别的Region中去。如果拷贝时发现没有空闲的Region可以承载自己的存活对象了，就会触发一次失败。一旦失败，立刻就会停止系统程序，切换为单线程进行标记，清理和压缩整理，以空出来一批Region。
 
 
 
@@ -193,14 +211,152 @@ G1新生代有survivor和eden区，触发机制都是类似的。当新生代达
 
 # Young GC与Full GC
 
+进入老年代的对象
 
+- 新手代对象年龄大了，超过配置（"-XX:MaxTenuringThreshold"）
+- 动态年龄判断规则
+- 新生代垃圾回收后，存活对象太多，无法放入Surviovr中
+
+
+
+## Full GC的触发时机
+
+- 发生Young GC前进行检查，如果老年代可用的连续内存空间” < “新生代历次Young GC后升入老年代的对象总和的平均大小”，说明本次Young GC后可能升入老年代的对象大小，可能超过了老年代当前可用内存空间
+- 执行Young GC后，要放入老年代区域的对象大小 > 老年代剩余空间
+- 老年代内存使用率超过92%（参数-XX:CMSInitiatingOccupancyFaction可调整，默认值为92%）
+
+
+
+# GC日志与分析
+
+打印GC日志参数
+
+- -XX:+PrintGCDetils：打印详细的gc日志
+- -XX:+PrintGCTimeStamps：这个参数可以打印出来每次GC发生的时间
+- -Xloggc:gc.log：这个参数可以设置将gc日志写入一个磁盘文件
+
+# jstat、jmap、jhat
+
+## jstat
+
+jstat -gc -PID。使用后有一下信息
+
+1. SOC：From Survivor区的大小
+2. S1C：To Survivor区的大小
+3. S0U：From Survivor当前使用的内存大小
+4. S1U：To Survivor区的大小
+5. EC：Eden区的大小
+6. EU：Eden当前使用内存大小
+7. OC：老年代大小
+8. OU：老年代当前使用内存大小
+9. MC：方法区（永久的，元数据区）大小
+10. MU：方法区（永久的，元数据区）当前使用内存大小
+11. YGC：系统运行迄今Young GC次数
+12. YGCT：Young GC总耗时
+13. FGC：系统运行迄今Full GC次数
+14. FGCT：Full GC总耗时
+15. GCT：所有GC总耗时
+
+> jstat -gccapacity PID：堆内存分析
+>
+> jstat -gcnew PID：年轻代GC分析，这里的TT和MTT可以看到对象在年轻代存活的年龄和存活的最大年龄
+>
+> jstat -gcnewcapacity PID：年轻代内存分析
+>
+> jstat -gcold PID：老年代GC分析
+>
+> jstat -gcoldcapacity PID：老年代内存分析
+>
+> jstat -gcmetacapacity PID：元数据区内存分析
+>
+> jstat -gc PID 1000 -10  每一秒统计一次，共统计十次
+
+## jmap
+
+jmap -histo PID  可以看当前jvm中对象内存占用情况
+
+jmap -dump:live,format=b,file=dump.hprof PID  当前目录下生成dump.hrpof文件。可通过相关工具打开
 
 
 
 # 案例
->>>>>>> af3e21cdeed64fc20f1d1ed3561652dfe784213c
+> 预估性优化：尽量让每次Young GC后的存活对象小于Survivor区域的50%，都留存在年轻代里。尽量别让对象进入老年代。尽量减少Full GC的频率，避免频繁Full GC对JVM性能的影响。
+
+频繁Full GC的几种常见原因
+
+- 系统承载高并发请求，或者处理数据量过大，导致Young GC很频繁，而且每次Young GC过后存活对象太多，内存分配不合理，Survivor区域过小，导致对象频繁进入老年代，频繁触发Full GC。
+- 系统一次性加载过多数据进内存，搞出来很多大对象，导致频繁有大对象进入老年代，必然频繁触发Full GC
+- 系统发生了内存泄漏，莫名其妙创建大量的对象，始终无法回收，一直占用在老年代里，必然频繁触发Full GC
+- Metaspace（永久代）因为加载类过多触发Full GC
+- 误调用System.gc()触发Full GC
+
+### 频繁Full GC导致内存碎片问题
+
+两个参数“-XX:+UseCMSCompactAtFullCollection -XX:CMSFullGCsBeforeCompaction=5”是设置的5次Full GC之后才会进行一次压缩操作，解决内存碎片的问题，空出来大片的连续可用内存空间。这意味着5次Full GC的过程中，可能会产生大量内存碎片。太多的内存碎片会增加Full GC的频率。
+
+所以可适当调整上述两个参数。
+
+### JVM的默认模板参数
+
+-Xms4096M -Xmx4096M -Xmn3072M -Xss1M  -XX:PermSize=256M -XX:MaxPermSize=256M -XX:+UseParNewGC -XX:+UseConcMarkSweepGC -XX:CMSInitiatingOccupancyFaction=92 -XX:+UseCMSCompactAtFullCollection -XX:CMSFullGCsBeforeCompaction=0 -XX:+CMSParallelInitialMarkEnabled -XX:+CMSScavengeBeforeRemark
+
+XX:+CMSScavengeBeforeRemark：在CMS进行重新标记阶段前进行一次Young GC（好处是，可提前回收一些年轻代中的对象，在CMS的重新标记阶段就可以少标记一些对象，提高了其效率）
+
+可根据业务情况，自行定制。
+
+### 大对象导致Full GC
+
+导出大批量文件，加上慢sql。导致有大对象一直停留在老年代
+
+### 日志注解导致Full GC
+
+导出和会员相关的文件时，远程调用member服务获取会员信息，会异步的使用线程池写日志。大量的导出导致线程池的阻塞队列不停的增长，导致内存不够使用，频繁GC
+
+### 远程调用超时时间太长导致的OOM
 
 
+
+### Jetty的堆外内存溢出
+
+
+
+
+
+# OOM(Out Of Memory)
+
+-XX:+HeapDumpOnOutOfMemoryError    此参数可以在OOM时，自动dump当前内存快照
+
+-XX:HeapDumpPath=/usr/local/app/oom	此参数是指将快照放在那个目录下
+
+## 那些区域可能OOM？
+
+1. Metaspace可能发生OOM，因为其会存放类信息
+2. 各个线程的栈内存（默认为1MB），也可能会发生OOM
+3. 堆内存空间
+
+### Metaspace
+
+-XX:MetaspaceSize=512m 
+
+-XX:MaxMetaspaceSize=512m
+
+如果Metaspace区域满了，就需要对其进行回收，但回收条件很苛刻（该类的类加载需要被回收，该类的所有对象实例需要被回收等）。若无法对其进行有效回收，就OOM
+
+正常情况下，有两种情况会发生Metaspace的OOM
+
+1. Metaspace的容量设置的较小
+2. 代码中存在一些cglib之类的技术生成的动态类。一旦代码有些小问题，就可能导致生成类过多，Metaspace不够用
+
+### 栈内存
+
+每个线程的虚拟机栈的大小是固定的，如果其中大量调用方法，栈中会不停的压入栈帧，导致栈内存溢出
+
+### 堆内存
+
+对象太多，两种情况
+
+1. 系统请求量太大，短时间内存在大量对象，导致溢出
+2. 内存泄漏，存在大量未使用对象无法清除，导致溢出
 
 # [HotSpot JVM内存管理(译文)](https://www.javadoop.com/post/jvm-memory-management)
 
