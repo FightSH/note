@@ -311,6 +311,9 @@ static final class FairSync extends Sync {
         // 返回false之后，会在acquireQueued()方法的for循环中再次进入此方法，不过会进入第一个分支
         return false;
     }
+    //在第一次进入shouldParkAfterFailedAcquire()方法时，通常会返回false
+    //原因很简单，前驱节点的waitStatus=-1是依赖于后继节点设置的。
+    //并且这个方法是套在循环里的，所以第二次进来的时候状态就是-1了
 	
      /**
      * Convenience method to park and then check if interrupted.
@@ -324,13 +327,180 @@ static final class FairSync extends Sync {
         return Thread.interrupted();
     }
     
-    
-    
-    
-    
-    
+ 
 }
 ~~~
 
+### 加锁（公平锁）注意点
+
+- **阻塞队列不包含head头节点**，head头节点是持有当前锁的线程
+- **线程被挂起时，是需要前驱节点对其进行唤醒**
+- 
+
+
+
+
+
 ## 线程解锁（公平锁）
+
+~~~JAVA
+public void unlock() {
+    sync.release(1);
+}
+
+public final boolean release(int arg) {
+    // 往后看吧
+    if (tryRelease(arg)) {
+        Node h = head;
+        if (h != null && h.waitStatus != 0)
+            unparkSuccessor(h);
+        return true;
+    }
+    return false;
+}
+
+// 回到ReentrantLock看tryRelease方法
+protected final boolean tryRelease(int releases) {
+    int c = getState() - releases;
+    if (Thread.currentThread() != getExclusiveOwnerThread())
+        throw new IllegalMonitorStateException();
+    // 是否完全释放锁
+    boolean free = false;
+    // 其实就是重入的问题，如果c==0，也就是说没有嵌套锁了，可以释放了，否则还不能释放掉
+    if (c == 0) {
+        free = true;
+        setExclusiveOwnerThread(null);
+    }
+    setState(c);
+    return free;
+}
+
+/**
+ * Wakes up node's successor, if one exists.
+ *
+ * @param node the node
+ */
+// 唤醒后继节点
+// 从上面调用处知道，参数node是head头结点
+private void unparkSuccessor(Node node) {
+    /*
+     * If status is negative (i.e., possibly needing signal) try
+     * to clear in anticipation of signalling.  It is OK if this
+     * fails or if status is changed by waiting thread.
+     */
+    int ws = node.waitStatus;
+    // 如果head节点当前waitStatus<0, 将其修改为0
+    if (ws < 0)
+        compareAndSetWaitStatus(node, ws, 0);
+    /*
+     * Thread to unpark is held in successor, which is normally
+     * just the next node.  But if cancelled or apparently null,
+     * traverse backwards from tail to find the actual
+     * non-cancelled successor.
+     */
+    // 下面的代码就是唤醒后继节点，但是有可能后继节点取消了等待（waitStatus==1）
+    // 从队尾往前找，找到waitStatus<=0的所有节点中排在最前面的
+    Node s = node.next;
+    if (s == null || s.waitStatus > 0) {
+        s = null;
+        // 从后往前找，仔细看代码，不必担心中间有节点取消(waitStatus==1)的情况
+        for (Node t = tail; t != null && t != node; t = t.prev)
+            if (t.waitStatus <= 0)
+                s = t;
+    }
+    if (s != null)
+        // 唤醒线程
+        LockSupport.unpark(s.thread);
+}
+
+
+private final boolean parkAndCheckInterrupt() {
+    LockSupport.park(this); // 刚刚线程被挂起在这里了
+    return Thread.interrupted();
+}
+// 又回到这个方法了：acquireQueued(final Node node, int arg)，这个时候，node的前驱是head了，继续去尝试获取锁
+~~~
+
+
+
+
+
+
+
+## 总结
+
+总结一下吧。
+
+在并发环境下，加锁和解锁需要以下三个部件的协调：
+
+1. 锁状态。我们要知道锁是不是被别的线程占有了，这个就是 state 的作用，它为 0 的时候代表没有线程占有锁，可以去争抢这个锁，用 CAS 将 state 设为 1，如果 CAS 成功，说明抢到了锁，这样其他线程就抢不到了，如果锁重入的话，state进行 +1 就可以，解锁就是减 1，直到 state 又变为 0，代表释放锁，所以 lock() 和 unlock() 必须要配对啊。然后唤醒等待队列中的第一个线程，让其来占有锁。
+2. 线程的阻塞和解除阻塞。AQS 中采用了 LockSupport.park(thread) 来挂起线程，用 unpark 来唤醒线程。
+3. 阻塞队列。因为争抢锁的线程可能很多，但是只能有一个线程拿到锁，其他的线程都必须等待，这个时候就需要一个 queue 来管理这些线程，AQS 用的是一个 FIFO 的队列，就是一个链表，每个 node 都持有后继节点的引用。AQS 采用了 CLH 锁的变体来实现，感兴趣的读者可以参考这篇文章[关于CLH的介绍](http://coderbee.net/index.php/concurrent/20131115/577)，写得简单明了。
+
+![](img/602f37927d9c081db9a6d12c.png)
+
+
+
+
+
+## 非公平锁对比
+
+非公平锁的 lock 方法：
+
+```java
+static final class NonfairSync extends Sync {
+    final void lock() {
+        // 2. 和公平锁相比，这里会直接先进行一次CAS，成功就返回了
+        if (compareAndSetState(0, 1))
+            setExclusiveOwnerThread(Thread.currentThread());
+        else
+            acquire(1);
+    }
+    // AbstractQueuedSynchronizer.acquire(int arg)
+    public final void acquire(int arg) {
+        if (!tryAcquire(arg) &&
+            acquireQueued(addWaiter(Node.EXCLUSIVE), arg))
+            selfInterrupt();
+    }
+    protected final boolean tryAcquire(int acquires) {
+        return nonfairTryAcquire(acquires);
+    }
+}
+/**
+ * Performs non-fair tryLock.  tryAcquire is implemented in
+ * subclasses, but both need nonfair try for trylock method.
+ */
+final boolean nonfairTryAcquire(int acquires) {
+    final Thread current = Thread.currentThread();
+    int c = getState();
+    if (c == 0) {
+        // 这里没有对阻塞队列进行判断
+        if (compareAndSetState(0, acquires)) {
+            setExclusiveOwnerThread(current);
+            return true;
+        }
+    }
+    else if (current == getExclusiveOwnerThread()) {
+        int nextc = c + acquires;
+        if (nextc < 0) // overflow
+            throw new Error("Maximum lock count exceeded");
+        setState(nextc);
+        return true;
+    }
+    return false;
+}
+```
+
+总结：公平锁和非公平锁只有两处不同：
+
+1. 非公平锁在调用 lock 后，首先就会调用 CAS 进行一次抢锁，如果这个时候恰巧锁没有被占用，那么直接就获取到锁返回了。
+2. 非公平锁在 CAS 失败后，和公平锁一样都会进入到 tryAcquire 方法，在 tryAcquire 方法中，如果发现锁这个时候被释放了（state == 0），非公平锁会直接 CAS 抢锁，但是公平锁会判断等待队列是否有线程处于等待状态，如果有则不去抢锁，乖乖排到后面。
+
+公平锁和非公平锁就这两点区别，如果这两次 CAS 都不成功，那么后面非公平锁和公平锁是一样的，都要进入到阻塞队列等待唤醒。
+
+相对来说，非公平锁会有更好的性能，因为它的吞吐量比较大。当然，非公平锁让获取锁的时间变得更加不确定，可能会导致在阻塞队列中的线程长期处于饥饿状态。
+
+
+
+
 
