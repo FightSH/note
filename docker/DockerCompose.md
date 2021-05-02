@@ -59,7 +59,148 @@ sudo chmod +x /usr/local/bin/docker-compose
 
 
 
-## Getting Started
+## 快速开始Getting Started
+
+见官方文档的快速开始
+
+
+
+## Docker-compose yml文件规则
+
+[Compose file | Docker Documentation](https://docs.docker.com/compose/compose-file/)
+
+三层
+
+前两层是核心
+
+~~~shell
+# 三层
+
+version: '' # 版本
+services: '' # 服务
+	服务1:web
+		# 服务配置
+		images:
+		build:
+		network:
+		depends_on: # 可用来保证容器的启动顺序(根据依赖关系)
+        deploy: # 集群相关
+		... # 容器配置 更多参数见官方文档
+	服务2:redis
+		...
+# 其他配置 网络/卷，全局规则
+volumes:
+networks:
+configs:
+
+~~~
+
+
+
+Example
+
+~~~shell
+version: "3.9"
+services:
+
+  redis:
+    image: redis:alpine
+    ports:
+      - "6379"
+    networks:
+      - frontend
+    deploy:
+      replicas: 2
+      update_config:
+        parallelism: 2
+        delay: 10s
+      restart_policy:
+        condition: on-failure
+
+  db:
+    image: postgres:9.4
+    volumes:
+      - db-data:/var/lib/postgresql/data
+    networks:
+      - backend
+    deploy:
+      placement:
+        max_replicas_per_node: 1
+        constraints:
+          - "node.role==manager"
+
+  vote:
+    image: dockersamples/examplevotingapp_vote:before
+    ports:
+      - "5000:80"
+    networks:
+      - frontend
+    depends_on:
+      - redis
+    deploy:
+      replicas: 2
+      update_config:
+        parallelism: 2
+      restart_policy:
+        condition: on-failure
+
+  result:
+    image: dockersamples/examplevotingapp_result:before
+    ports:
+      - "5001:80"
+    networks:
+      - backend
+    depends_on:
+      - db
+    deploy:
+      replicas: 1
+      update_config:
+        parallelism: 2
+        delay: 10s
+      restart_policy:
+        condition: on-failure
+
+  worker:
+    image: dockersamples/examplevotingapp_worker
+    networks:
+      - frontend
+      - backend
+    deploy:
+      mode: replicated
+      replicas: 1
+      labels: [APP=VOTING]
+      restart_policy:
+        condition: on-failure
+        delay: 10s
+        max_attempts: 3
+        window: 120s
+      placement:
+        constraints:
+          - "node.role==manager"
+
+  visualizer:
+    image: dockersamples/visualizer:stable
+    ports:
+      - "8080:8080"
+    stop_grace_period: 1m30s
+    volumes:
+      - "/var/run/docker.sock:/var/run/docker.sock"
+    deploy:
+      placement:
+        constraints:
+          - "node.role==manager"
+
+networks:
+  frontend:
+  backend:
+
+volumes:
+  db-data:
+~~~
+
+
+
+### 练习
 
 
 
