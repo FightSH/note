@@ -480,13 +480,19 @@ private final void tryPresize(int size) {
 }
 ~~~
 
-
+transfer方法可能会多线程调用，
 
 ~~~java
 private final void transfer(Node<K,V>[] tab, Node<K,V>[] nextTab) {
+    // stride可理解为“步长”，其在单核下直接等于n，即原数组长度
+    // 在多核下，为 n>>>3/NCPU,最小值为16
+	// 希望让每个CPU都尽可能处理的桶数一样多，如果桶很少，就默认一个线程处理16个桶
     int n = tab.length, stride;
     if ((stride = (NCPU > 1) ? (n >>> 3) / NCPU : n) < MIN_TRANSFER_STRIDE)
         stride = MIN_TRANSFER_STRIDE; // subdivide range
+    
+    // 如果nextTab为null，会先进行一次初始化。
+    // 可保证第一次个发起数据迁移的线程调用此方法时，nextTab为null（具体可看可看此方法的调用处）
     if (nextTab == null) {            // initiating
         try {
             @SuppressWarnings("unchecked")
@@ -496,73 +502,111 @@ private final void transfer(Node<K,V>[] tab, Node<K,V>[] nextTab) {
             sizeCtl = Integer.MAX_VALUE;
             return;
         }
+        // nextTable和transferIndex都是concurrentmap中的属性
         nextTable = nextTab;
         transferIndex = n;
     }
+    
     int nextn = nextTab.length;
+    // ForwardingNode——正在迁移中的node，这个node的hash值是 MOVED
+    // 当其他线程发现此node时，会跳过。起到占位作用
     ForwardingNode<K,V> fwd = new ForwardingNode<K,V>(nextTab);
+    // advance为true，则说明需要进行下个位置的迁移
     boolean advance = true;
+    // 完成状态
     boolean finishing = false; // to ensure sweep before committing nextTab
+    // i是位置索引下标
+    // bound是当前线程可以处理的区间的最小边界
     for (int i = 0, bound = 0;;) {
         Node<K,V> f; int fh;
+        // 控制i的递减(从后向前)
         while (advance) {
             int nextIndex, nextBound;
+            // 如果i-->=bound，或者完成状态为true，说明迁移任务已经完成。会将advance修改为false
+            // 第一次进入循环，一般会进入下面分支代码(i--无法通过)。
             if (--i >= bound || finishing)
                 advance = false;
+            // 当线程进入会选取最新的转移下标
+            // 如果 transferIndex <=0，意味着没有区间了，扩容可结束。
             else if ((nextIndex = transferIndex) <= 0) {
                 i = -1;
                 advance = false;
             }
+            // CAS修改 transferIndex(length-区间值)。
             else if (U.compareAndSetInt
                      (this, TRANSFERINDEX, nextIndex,
                       nextBound = (nextIndex > stride ?
                                    nextIndex - stride : 0))) {
+                // 获取当前线程可出去区间的最小下标
                 bound = nextBound;
+                // i是当前线程可以处理的当前区间的最大下标
                 i = nextIndex - 1;
                 advance = false;
             }
         }
+        // 对i的状态进行判断？
         if (i < 0 || i >= n || i + n >= nextn) {
             int sc;
             if (finishing) {
+                // 完成扩容的情况下，对相关属性进行更新
                 nextTable = null;
                 table = nextTab;
                 sizeCtl = (n << 1) - (n >>> 1);
                 return;
             }
+            // CAS操作将sizeCtl-1
+            // sizeCtl 在迁移前会设置为 (rs << RESIZE_STAMP_SHIFT) + 2。然后，每有一个线程参与迁移就会将 sizeCtl 加 1
+            // 这里去 -1 ，代表线程完成了属于自己的任务
             if (U.compareAndSetInt(this, SIZECTL, sc = sizeCtl, sc - 1)) {
+                // 任务完成，可return
                 if ((sc - 2) != resizeStamp(n) << RESIZE_STAMP_SHIFT)
                     return;
+                // 说明 (sc - 2) == resizeStamp(n) << RESIZE_STAMP_SHIFT，即所有的迁移任务已完成
                 finishing = advance = true;
                 i = n; // recheck before commit
             }
         }
+        // 原数组下标i处节点若为空，则放入ForwardingNode(占位)
         else if ((f = tabAt(tab, i)) == null)
             advance = casTabAt(tab, i, null, fwd);
+        // 说明被其他线程占位了。继续下一个位置
         else if ((fh = f.hash) == MOVED)
             advance = true; // already processed
         else {
+            // 到此处说明，当前下标有实际值，并且未被占位处理。
+            // 对其加锁，准备进行迁移
             synchronized (f) {
                 if (tabAt(tab, i) == f) {
+                    // 将链表一分为二，并找到原链表中的lastRun，然后lastRun和其之后的节点进行迁移
+                    // lastRun之前的节点进行克隆后，分到两个链表中
                     Node<K,V> ln, hn;
+                    // 头结点hash>0，是链表，否则是红黑树
                     if (fh >= 0) {
+                        // 对原数组长度进行与运算
                         int runBit = fh & n;
+                        // 
                         Node<K,V> lastRun = f;
+                        // 遍历
                         for (Node<K,V> p = f.next; p != null; p = p.next) {
+                            // 与 计算
                             int b = p.hash & n;
+                            // 当前节点的计算结果和头节点不同
                             if (b != runBit) {
                                 runBit = b;
                                 lastRun = p;
                             }
                         }
+                        // 设置低位节点
                         if (runBit == 0) {
                             ln = lastRun;
                             hn = null;
                         }
+                        // 设置高位节点
                         else {
                             hn = lastRun;
                             ln = null;
                         }
+                        // 循环生成两个链表
                         for (Node<K,V> p = f; p != lastRun; p = p.next) {
                             int ph = p.hash; K pk = p.key; V pv = p.val;
                             if ((ph & n) == 0)
@@ -570,12 +614,16 @@ private final void transfer(Node<K,V>[] tab, Node<K,V>[] nextTab) {
                             else
                                 hn = new Node<K,V>(ph, pk, pv, hn);
                         }
+                        // 低位链表放在新数组下标i处
                         setTabAt(nextTab, i, ln);
+                        // 高位链表放在新数组下标i+n处
                         setTabAt(nextTab, i + n, hn);
+                        // 原数组下标i处进行占位，表示处理完毕
                         setTabAt(tab, i, fwd);
                         advance = true;
                     }
                     else if (f instanceof TreeBin) {
+                        // 树的处理...略过
                         TreeBin<K,V> t = (TreeBin<K,V>)f;
                         TreeNode<K,V> lo = null, loTail = null;
                         TreeNode<K,V> hi = null, hiTail = null;
