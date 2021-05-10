@@ -689,6 +689,10 @@ private void cancelAcquire(Node node) {
 
 # Java中的中断(Interrupt)
 
+## 概论
+
+
+
 ## 线程中断
 
 中断代表线程状态，每个线程都关联了一个中断状态，是一个 true 或 false 的 boolean 值，初始值为 false。
@@ -696,10 +700,11 @@ private void cancelAcquire(Node node) {
 关于中断状态，我们需要重点关注 Thread 类中的以下几个方法：
 
 ```java
+// 判断线程是否中断
 public boolean isInterrupted() {}
-
+// 判断线程的中断状态。调用时，会修改会线程中断状态为false(如果)
 public static boolean interrupted() {}
-
+// 该方法只是设置了 标识，并不会真正的中断一个线程
 public void interrupt() {}
 ```
 
@@ -738,9 +743,9 @@ while (!Thread.interrupted()) {
 
 
 
-### InterruptedException 概述
+## InterruptedException 概述
 
-它是一个特殊的异常，不是说 JVM 对其有特殊的处理，而是它的使用场景比较特殊。通常，我们可以看到，像 Object 中的 wait() 方法，ReentrantLock 中的 lockInterruptibly() 方法，Thread 中的 sleep() 方法等等，这些方法都带有 `throws InterruptedException`，我们通常称这些方法为阻塞方法（blocking method）。
+它是一个特殊的异常，它的使用场景比较特殊。通常，我们可以看到，像 Object 中的 wait() 方法，ReentrantLock 中的 lockInterruptibly() 方法，Thread 中的 sleep() 方法等等，这些方法都带有 `throws InterruptedException`，我们通常称这些方法为阻塞方法（blocking method）。
 
 阻塞方法一个很明显的特征是，它们需要花费比较长的时间（不是绝对的，只是说明时间不可控），还有它们的方法结束返回往往依赖于外部条件，如 wait 方法依赖于其他线程的 notify，lock 方法依赖于其他线程的 unlock等等。
 
