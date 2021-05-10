@@ -600,7 +600,7 @@ public void lockInterruptibly() throws InterruptedException {
 }
 ```
 
-方法上多了个 `throws InterruptedException` ，经过前面那么多知识的铺垫，这里我就不再啰里啰嗦了。
+方法上多了个 `throws InterruptedException` 
 
 ```java
 public final void acquireInterruptibly(int arg)

@@ -1,59 +1,38 @@
-# Java7-HashMap
-
-java7中的HashMap是由数组+链表组成，数组中的每个元素都是一个单向链表。如下图
-
-![1](img/1.png)
-
-上图中，每个绿色的实体是嵌套类 Entry 的实例，Entry 包含四个属性：key, value, hash 值和用于单向链表的 next。
-
-capacity：当前数组容量，始终保持 2^n，可以扩容，扩容后数组大小为当前的 2 倍。
-
-loadFactor：负载因子，默认为 0.75。
-
-threshold：扩容的阈值，等于 capacity * loadFactor
-
-# Java7-ConcurrentHashMap
-
-
-
 # Java8-HashMap
 
 在java8中，HashMap由**数组+链表+红黑树**组成。在java7HashMap(无红黑树结构)中，通过key的hash值的能够快速定位到数组的具体下标，之后需要顺着链表一个个的寻找才能寻找到所需要的value，时间复杂度为O(n)。而在java8中，当链表的元素达到8个时，会将链表转换为红黑树，在红黑树中寻找元素的时间复杂度为O(logN)。
 
+
+
 在java8中，使用Node来代表数据节点（链表中使用Node，红黑树中使用TreeNode）。
 
 ~~~java
-
+	// 默认的初始容量是16
+    static final int DEFAULT_INITIAL_CAPACITY = 1 << 4;
+    // 最大容量
+    static final int MAXIMUM_CAPACITY = 1 << 30;
+    // 默认的填充因子
+    static final float DEFAULT_LOAD_FACTOR = 0.75f;
+    // 当桶(bucket)上的结点数大于这个值时会转成红黑树
+    static final int TREEIFY_THRESHOLD = 8;
+    // 当桶(bucket)上的结点数小于这个值时树转链表
+    static final int UNTREEIFY_THRESHOLD = 6;
+    // 桶中结构转化为红黑树对应的table的最小大小
+    static final int MIN_TREEIFY_CAPACITY = 64;
+	// 节点数组
     transient Node<K,V>[] table;
-
-
+	// 
     transient Set<Map.Entry<K,V>> entrySet;
 
-    /**
-     * The number of key-value mappings contained in this map.
-     */
+    // 存放元素个数
     transient int size;
 
-    /**
-     * The number of times this HashMap has been structurally modified
-     * Structural modifications are those that change the number of mappings in
-     * the HashMap or otherwise modify its internal structure (e.g.,
-     * rehash).  This field is used to make iterators on Collection-views of
-     * the HashMap fail-fast.  (See ConcurrentModificationException).
-     */
+	// 计数器
     transient int modCount;
 
-    /**
-     * The next size value at which to resize (capacity * load factor).
-     *
-     * @serial
-     */
-    // (The javadoc description is true upon serialization.
-    // Additionally, if the table array has not been allocated, this
-    // field holds the initial array capacity, or zero signifying
-    // DEFAULT_INITIAL_CAPACITY.)
+	// 临界值 当实际大小(容量*填充因子)超过临界值时，会进行扩容
     int threshold;
-
+	// 负载因子
     final float loadFactor;
  
 // 以上为HashMap的fields
@@ -68,7 +47,19 @@ static class Node<K,V> implements Map.Entry<K,V> {
 
 ~~~
 
-## put
+- **loadFactor 负载因子**
+
+	loadFactor 加载因子是控制数组存放数据的疏密程度，loadFactor 越趋近于 1，那么 数组中存放的数据(entry)也就越多，也就越密，也就是会让链表的长度增加，loadFactor 越小，也就是趋近于 0，数组中存放的数据(entry)也就越少，也就越稀疏。
+
+	**loadFactor 太大导致查找元素效率低，太小导致数组的利用率低，存放的数据会很分散。loadFactor 的默认值为 0.75f 是官方给出的一个比较好的临界值**。
+
+	给定的默认容量为 16，负载因子为 0.75。Map 在使用过程中不断的往里面存放数据，当数量达到了 16 * 0.75 = 12 就需要将当前 16 的容量进行扩容，而扩容这个过程涉及到 rehash、复制数据等操作，所以非常消耗性能。
+
+- **threshold**
+
+	**threshold = capacity \* loadFactor**，**当 Size>=threshold**的时候，那么就要考虑对数组的扩增了，也就是说，这个的意思就是 **衡量数组是否需要扩增的一个标准**。
+
+## put方法
 
 ~~~java
 public V put(K key, V value) {
@@ -96,7 +87,7 @@ final V putVal(int hash, K key, V value, boolean onlyIfAbsent, boolean evict) {
         else {
             // p是链表，
             for (int binCount = 0; ; ++binCount) {
-                //尝试插入链表的尾部
+                //尝试插入链表的尾部(在java1.7中，采用的是头插法)
                 if ((e = p.next) == null) {
                     p.next = newNode(hash, key, value, null);
                     // 如果新插入的值是链表中的第8个，那么将链表转换为红黑树
@@ -260,9 +251,9 @@ final Node<K,V> getNode(int hash, Object key) {
 
 # Java8-ConcurrentHashMap
 
-相较于java7中的ConcurrentHashMap，java8的实现有了较大的改动。不同于java7中segment和Retreenlock的设定，java8中通过使用CAS来控制并发
+相较于java7中的ConcurrentHashMap，java8的实现有了较大的改动。不同于java7中采用**segment+HashEntry数组+链表**结构，其采用了**Node+链表+红黑树**结构。并使用了**Synchronized+CAS**来控制并发
 
-## put
+## put方法
 
 ~~~java
 public V put(K key, V value) {
@@ -437,7 +428,7 @@ private final void treeifyBin(Node<K,V>[] tab, int index) {
 
 
 
-## 扩容：tryPresize和transfer
+## 扩容
 
 ~~~java
 
