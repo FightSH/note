@@ -1,35 +1,74 @@
-# AQS
+## AQS概述
 
- AbstractQueuedSynchronizer（抽象同步队列器），因为它是 Java 并发包的基础工具类，是实现 ReentrantLock、CountDownLatch、Semaphore、FutureTask 等类的基础。
 
-## 结构
 
-~~~java
+AbstractQueuedSynchronizer（抽象同步队列器），因为它是 Java 并发包的基础工具类，是实现 ReentrantLock、CountDownLatch、Semaphore、FutureTask 等类的基础。
+
+
+
+在Concurrent包中的锁基本都是可重入锁，所以命名上都带有 reentrant 。
+
+一般而言，为了实现一把具有阻塞功能或唤醒功能的锁，需要以下几个功能
+
+1. 需要记录当前是那个线程持有锁
+2. 需要一个state变量，记录锁状态。并且对于state变量的修改，需要确保是线程安全的操作。
+3. 需要底层支持对一个线程进行阻塞或唤醒操作
+4. 需要有一个队列维护所有阻塞的线程。这个队列也应该是线程安全的队列
+
+
+
+
+
+```java
+public abstract class AbstractQueuedSynchronizer
+    extends AbstractOwnableSynchronizer
+    implements java.io.Serializable {
+......
+
 // 头结点，你直接把它当做 当前持有锁的线程 可能是最好理解的
-private transient volatile Node head;
+private transient volatile Node head;      
 
 // 阻塞的尾节点，每个新的节点进来，都插入到最后，也就形成了一个链表
 private transient volatile Node tail;
 
 // 这个是最重要的，代表当前锁的状态，0代表没有被占用，大于 0 代表有线程持有当前锁
 // 这个值可以大于 1，是因为锁可以重入，每次重入都加上 1
-private volatile int state;
+private volatile int state;      
 
 // 代表当前持有独占锁的线程，举个最重要的使用例子，因为锁可以重入
 // reentrantLock.lock()可以嵌套调用多次，所以每次用这个来判断当前线程是否已经拥有了锁
 // if (currentThread == getExclusiveOwnerThread()) {state++}
-private transient Thread exclusiveOwnerThread; //继承自AbstractOwnableSynchronizer
-~~~
+private transient Thread exclusiveOwnerThread; //此变量继承自AbstractOwnableSynchronizer
+    
+static final class Node {
+    ......
+}
+
+......
+}
+```
+
+
+
+在AQS中，其利用双向链表和CAS实现了一个阻塞队列，head为阻塞队列头节点，tail为尾节点。入队操作即把新的Node放到tail后面。然后对tail进行CAS操作；出队就是对head进行CAS操作，把head向后移一个位置
+
+
 
 
 
 **注意：阻塞队列不包含head**
 
-![aqs-0](img/aqs-0.png)
+
+
+![img](https://cdn.nlark.com/yuque/0/2021/png/22003074/1627123238785-af0d508d-ef64-4cb4-9a49-c1be7ef0df61.png)
+
+
 
 等待队列中的每个线程都被包装为一个Node实例，结构是链表
 
-~~~java
+
+
+```
  static final class Node {
         /** Marker to indicate a node is waiting in shared mode */
      	//标识当前节点在共享模式下
@@ -53,40 +92,7 @@ private transient Thread exclusiveOwnerThread; //继承自AbstractOwnableSynchro
          */
         static final int PROPAGATE = -3;
 
-        /**
-         * Status field, taking on only the values:
-         *   SIGNAL:     The successor of this node is (or will soon be)
-         *               blocked (via park), so the current node must
-         *               unpark its successor when it releases or
-         *               cancels. To avoid races, acquire methods must
-         *               first indicate they need a signal,
-         *               then retry the atomic acquire, and then,
-         *               on failure, block.
-         *   CANCELLED:  This node is cancelled due to timeout or interrupt.
-         *               Nodes never leave this state. In particular,
-         *               a thread with cancelled node never again blocks.
-         *   CONDITION:  This node is currently on a condition queue.
-         *               It will not be used as a sync queue node
-         *               until transferred, at which time the status
-         *               will be set to 0. (Use of this value here has
-         *               nothing to do with the other uses of the
-         *               field, but simplifies mechanics.)
-         *   PROPAGATE:  A releaseShared should be propagated to other
-         *               nodes. This is set (for head node only) in
-         *               doReleaseShared to ensure propagation
-         *               continues, even if other operations have
-         *               since intervened.
-         *   0:          None of the above
-         *
-         * The values are arranged numerically to simplify use.
-         * Non-negative values mean that a node doesn't need to
-         * signal. So, most code doesn't need to check for particular
-         * values, just for sign.
-         *
-         * The field is initialized to 0 for normal sync nodes, and
-         * CONDITION for condition nodes.  It is modified using CAS
-         * (or when possible, unconditional volatile writes).
-         */
+       
      	//如果这个值 大于0 代表此线程取消了等待，
         volatile int waitStatus;
 
@@ -103,15 +109,19 @@ private transient Thread exclusiveOwnerThread; //继承自AbstractOwnableSynchro
         Node nextWaiter;
 
     }
-~~~
+```
 
 
 
-# ReentrantLock源码分析
+## ReentrantLock源码分析
 
-## 构造函数
 
-~~~java
+
+### 构造函数
+
+
+
+```
 //非公平锁
 public ReentrantLock() {
 	sync = new NonfairSync();
@@ -124,11 +134,15 @@ public ReentrantLock(boolean fair) {
 abstract static class Sync extends AbstractQueuedSynchronizer {
     
 }
-~~~
+```
 
-## 线程抢锁（公平锁）
 
-~~~java
+
+### 线程抢锁（公平锁）
+
+
+
+```
     //lock方法
     public void lock() {
         sync.acquire(1);
@@ -329,21 +343,24 @@ static final class FairSync extends Sync {
     
  
 }
-~~~
+```
+
+
 
 ### 加锁（公平锁）注意点
 
+
+
 - **阻塞队列不包含head头节点**，head头节点是持有当前锁的线程
 - **线程被挂起时，是需要前驱节点对其进行唤醒**
-- 
 
 
 
+### 线程解锁（公平锁）
 
 
-## 线程解锁（公平锁）
 
-~~~JAVA
+```
 public void unlock() {
     sync.release(1);
 }
@@ -419,133 +436,19 @@ private final boolean parkAndCheckInterrupt() {
     return Thread.interrupted();
 }
 // 又回到这个方法了：acquireQueued(final Node node, int arg)，这个时候，node的前驱是head了，继续去尝试获取锁
-~~~
+```
 
 
 
+## 初步总结
 
 
-
-
-## 总结
-
-总结一下吧。
 
 在并发环境下，加锁和解锁需要以下三个部件的协调：
 
-1. 锁状态。我们要知道锁是不是被别的线程占有了，这个就是 state 的作用，它为 0 的时候代表没有线程占有锁，可以去争抢这个锁，用 CAS 将 state 设为 1，如果 CAS 成功，说明抢到了锁，这样其他线程就抢不到了，如果锁重入的话，state进行 +1 就可以，解锁就是减 1，直到 state 又变为 0，代表释放锁，所以 lock() 和 unlock() 必须要配对啊。然后唤醒等待队列中的第一个线程，让其来占有锁。
+
+
+1. 锁状态。 state 的作用就是判断锁是否被别的线程占有了，它为 0 的时候代表没有线程占有锁，可以去争抢这个锁，用 CAS 将 state 设为 1，如果 CAS 成功，说明抢到了锁，这样其他线程就抢不到了，如果锁重入的话，state进行 +1 就可以，解锁就是减 1，直到 state 又变为 0，代表释放锁，所以 lock() 和 unlock() 必须要配对啊。然后唤醒等待队列中的第一个线程，让其来占有锁。
 2. 线程的阻塞和解除阻塞。AQS 中采用了 LockSupport.park(thread) 来挂起线程，用 unpark 来唤醒线程。
-3. 阻塞队列。因为争抢锁的线程可能很多，但是只能有一个线程拿到锁，其他的线程都必须等待，这个时候就需要一个 queue 来管理这些线程，AQS 用的是一个 FIFO 的队列，就是一个链表，每个 node 都持有后继节点的引用。AQS 采用了 CLH 锁的变体来实现，感兴趣的读者可以参考这篇文章[关于CLH的介绍](http://coderbee.net/index.php/concurrent/20131115/577)，写得简单明了。
 
-![](img/602f37927d9c081db9a6d12c.png)
-
-
-
-
-
-## 非公平锁对比
-
-非公平锁的 lock 方法：
-
-```java
-static final class NonfairSync extends Sync {
-    final void lock() {
-        // 2. 和公平锁相比，这里会直接先进行一次CAS，成功就返回了
-        if (compareAndSetState(0, 1))
-            setExclusiveOwnerThread(Thread.currentThread());
-        else
-            acquire(1);
-    }
-    // AbstractQueuedSynchronizer.acquire(int arg)
-    public final void acquire(int arg) {
-        if (!tryAcquire(arg) &&
-            acquireQueued(addWaiter(Node.EXCLUSIVE), arg))
-            selfInterrupt();
-    }
-    protected final boolean tryAcquire(int acquires) {
-        return nonfairTryAcquire(acquires);
-    }
-}
-/**
- * Performs non-fair tryLock.  tryAcquire is implemented in
- * subclasses, but both need nonfair try for trylock method.
- */
-final boolean nonfairTryAcquire(int acquires) {
-    final Thread current = Thread.currentThread();
-    int c = getState();
-    if (c == 0) {
-        // 这里没有对阻塞队列进行判断
-        if (compareAndSetState(0, acquires)) {
-            setExclusiveOwnerThread(current);
-            return true;
-        }
-    }
-    else if (current == getExclusiveOwnerThread()) {
-        int nextc = c + acquires;
-        if (nextc < 0) // overflow
-            throw new Error("Maximum lock count exceeded");
-        setState(nextc);
-        return true;
-    }
-    return false;
-}
-```
-
-总结：公平锁和非公平锁只有两处不同：
-
-1. 非公平锁在调用 lock 后，首先就会调用 CAS 进行一次抢锁，如果这个时候恰巧锁没有被占用，那么直接就获取到锁返回了。
-2. 非公平锁在 CAS 失败后，和公平锁一样都会进入到 tryAcquire 方法，在 tryAcquire 方法中，如果发现锁这个时候被释放了（state == 0），非公平锁会直接 CAS 抢锁，但是公平锁会判断等待队列是否有线程处于等待状态，如果有则不去抢锁，乖乖排到后面。
-
-公平锁和非公平锁就这两点区别，如果这两次 CAS 都不成功，那么后面非公平锁和公平锁是一样的，都要进入到阻塞队列等待唤醒。
-
-相对来说，非公平锁会有更好的性能，因为它的吞吐量比较大。当然，非公平锁让获取锁的时间变得更加不确定，可能会导致在阻塞队列中的线程长期处于饥饿状态。
-
-
-
-
-
-## 示例图解析
-
-下面属于回顾环节，用简单的示例来说一遍，如果上面的有些东西没看懂，这里还有一次帮助你理解的机会。
-
-首先，第一个线程调用 reentrantLock.lock()，翻到最前面可以发现，tryAcquire(1) 直接就返回 true 了，结束。只是设置了 state=1，连 head 都没有初始化，更谈不上什么阻塞队列了。要是线程 1 调用 unlock() 了，才有线程 2 来，那世界就太太太平了，完全没有交集嘛，那我还要 AQS 干嘛。
-
-如果线程 1 没有调用 unlock() 之前，线程 2 调用了 lock(), 想想会发生什么？
-
-线程 2 会初始化 head【new Node()】，同时线程 2 也会插入到阻塞队列并挂起 (注意看这里是一个 for 循环，而且设置 head 和 tail 的部分是不 return 的，只有入队成功才会跳出循环)
-
-```java
-private Node enq(final Node node) {
-    for (;;) {
-        Node t = tail;
-        if (t == null) { // Must initialize
-            if (compareAndSetHead(new Node()))
-                tail = head;
-        } else {
-            node.prev = t;
-            if (compareAndSetTail(t, node)) {
-                t.next = node;
-                return t;
-            }
-        }
-    }
-}
-```
-
-首先，是线程 2 初始化 head 节点，此时 head== tail, waitStatus==0  
-
-![aqs-1](https://www.javadoop.com/blogimages/AbstractQueuedSynchronizer/aqs-1.png)
-
-然后线程 2 入队：
-
-![aqs-2](https://www.javadoop.com/blogimages/AbstractQueuedSynchronizer/aqs-2.png)
-
-同时我们也要看此时节点的 waitStatus，我们知道 head 节点是线程 2 初始化的，此时的 waitStatus 没有设置， java 默认会设置为 0，但是到 shouldParkAfterFailedAcquire 这个方法的时候，线程 2 会把前驱节点，也就是 head 的waitStatus设置为 -1。
-
-那线程 2 节点此时的 waitStatus 是多少呢，由于没有设置，所以是 0；
-
-如果线程 3 此时再进来，直接插到线程 2 的后面就可以了，此时线程 3 的 waitStatus 是 0，到 shouldParkAfterFailedAcquire 方法的时候把前驱节点线程 2 的 waitStatus 设置为 -1。
-
-![aqs-3](https://www.javadoop.com/blogimages/AbstractQueuedSynchronizer/aqs-3.png)
-
-这里可以简单说下 waitStatus 中 SIGNAL(-1) 状态的意思，Doug Lea 注释的是：代表后继节点需要被唤醒。也就是说这个 waitStatus 其实代表的不是自己的状态，而是后继节点的状态，我们知道，每个 node 在入队的时候，都会把前驱节点的状态改为 SIGNAL，然后阻塞，等待被前驱唤醒。这里涉及的是两个问题：有线程取消了排队、唤醒操作。其实本质是一样的，读者也可以顺着 “waitStatus代表后继节点的状态” 这种思路去看一遍源码。
+1. 阻塞队列。因为争抢锁的线程可能很多，但是只能有一个线程拿到锁，其他的线程都必须等待，这个时候就需要一个 queue 来管理这些线程，AQS 用的是一个 FIFO 的队列，就是一个链表，每个 node 都持有后继节点的引用。
