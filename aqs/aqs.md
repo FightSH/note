@@ -115,6 +115,12 @@ static final class Node {
 
 ## ReentrantLock源码分析
 
+对于ReentrantLock，其简易类图如下
+
+![image-20211103173023530](img/image-20211103173023530.png)
+
+ReentrantLock本身是什么代码逻辑，其加锁，解锁等实现都在其内部类Sync中。
+
 
 
 ### 构造函数
@@ -122,7 +128,7 @@ static final class Node {
 
 
 ```
-//非公平锁
+//默认非公平锁
 public ReentrantLock() {
 	sync = new NonfairSync();
 }
@@ -142,13 +148,13 @@ abstract static class Sync extends AbstractQueuedSynchronizer {
 
 
 
-```
+```java
     //lock方法
     public void lock() {
         sync.acquire(1);
     } 
 	
-	
+	// acquire是AQS中的模板方法。tryAcquire尝试拿锁(被FairSync和NonFairSync分别实现)，acquireQueued主要是将线程放入阻塞队列中并阻塞该线程
     public final void acquire(int arg) {
         //此时arg=1
         //如果过tryAcquire方法返回为true，则此方法直接结束，否则调用acquireQueued将线程压入到队列之中
@@ -203,7 +209,7 @@ static final class FairSync extends Sync {
      */
     // 在执行 acquireQueued 之前，先会调用 addWaiter(Node.EXCLUSIVE), arg) 方法
     // 此方法会将当前线程包装为Node，同时进入到队列中
-    // 参数mode此时是Node.EXCLUSIVE，代表独占模式
+    // 参数mode此时是Node.EXCLUSIVE，代表独占模式。此时线程还未阻塞
     private Node addWaiter(Node mode) {
 		//新建Node，在构造方法中通过Thread.currentThread()将当前线程封装。具体细节可看Node的构造方法
         Node node = new Node(mode);
@@ -262,7 +268,7 @@ static final class FairSync extends Sync {
                 if (p == head && tryAcquire(arg)) {
                     setHead(node);
                     p.next = null; // help GC
-                    return interrupted;
+                    return interrupted;   //这里的返回值是记录阻塞期间有无其他线程发送中断信号。毕竟此方法不支持中断
                 }
                 // 当前节点不是对头，或者抢占失败
                 // 看方法名可知，判断是否需要将当前线程挂起
@@ -334,13 +340,25 @@ static final class FairSync extends Sync {
      *
      * @return {@code true} if interrupted
      */
-    // 挂起线程，等待被唤醒
+    // 挂起线程，等待被其他线程唤醒
+    // park()函数返回有两种情况。
+    // 1.其他线程调用了unpark(Thread t)
+    // 2.其他线程调用了t.interrupt()。注意：lock方法不响应中断，但LockSupport.park()会响应中断。
+    // LockSupport.park()可能被中断唤醒，但acquireQueued（..）函数中是一个for死循环。唤醒之后，如果发现自己排在队列头部，就去拿锁；如果拿不到锁，则再次自己阻塞自己。不断重复此过程，直到拿到锁。
+    // 被唤醒后，如果是情况1会返回false。如果是情况2，会返回true
     private final boolean parkAndCheckInterrupt() {
         LockSupport.park(this);
         // Thread.interrupted() 默认返回false
         return Thread.interrupted();
     }
-    
+  
+    //当acquireQueued（..）返回true 时，会调用selfInterrupt（），自己给自己发送中断信号，也就是自己把自己的中断标志位设为true
+    //这么做是因为在阻塞期间，收到其他线程中断信号没有及时响应，现在要进行补偿。
+    //这样一来，如果该线程在lock代码块内部有调用sleep（）之类的阻塞方法，就可以抛出异常，响应该中断信号。
+    static void selfInterrupt() {
+        Thread.currentThread().interrupt();
+    }
+
  
 }
 ```
@@ -356,7 +374,7 @@ static final class FairSync extends Sync {
 
 
 
-### 线程解锁（公平锁）
+### 线程解锁
 
 
 
@@ -450,5 +468,11 @@ private final boolean parkAndCheckInterrupt() {
 
 1. 锁状态。 state 的作用就是判断锁是否被别的线程占有了，它为 0 的时候代表没有线程占有锁，可以去争抢这个锁，用 CAS 将 state 设为 1，如果 CAS 成功，说明抢到了锁，这样其他线程就抢不到了，如果锁重入的话，state进行 +1 就可以，解锁就是减 1，直到 state 又变为 0，代表释放锁，所以 lock() 和 unlock() 必须要配对啊。然后唤醒等待队列中的第一个线程，让其来占有锁。
 2. 线程的阻塞和解除阻塞。AQS 中采用了 LockSupport.park(thread) 来挂起线程，用 unpark 来唤醒线程。
+3. 阻塞队列。因为争抢锁的线程可能很多，但是只能有一个线程拿到锁，其他的线程都必须等待，这个时候就需要一个 queue 来管理这些线程，AQS 用的是一个 FIFO 的队列，就是一个链表，每个 node 都持有后继节点的引用。
 
-1. 阻塞队列。因为争抢锁的线程可能很多，但是只能有一个线程拿到锁，其他的线程都必须等待，这个时候就需要一个 queue 来管理这些线程，AQS 用的是一个 FIFO 的队列，就是一个链表，每个 node 都持有后继节点的引用。
+
+
+公平锁和非公平锁的区别在于
+
+- 非公平锁在调用 lock 后，首先就会调用 CAS 进行一次抢锁，如果这个时候恰巧锁没有被占用，那么直接就获取到锁返回了。
+- 非公平锁在 CAS 失败后，和公平锁一样都会进入到 tryAcquire 方法，在 tryAcquire 方法中，如果发现锁这个时候被释放了（state == 0），非公平锁会直接 CAS 抢锁，但是公平锁会判断等待队列是否有线程处于等待状态，如果有则不去抢锁，乖乖排到后面。
