@@ -4,7 +4,59 @@
 
 
 
-## 摘要
+一个简单的condition例子
+
+~~~java
+public class ConditionDemo {
+
+    final ReentrantLock lock = new ReentrantLock();
+
+    final Condition notEmpty = lock.newCondition();
+    final Condition notFull = lock.newCondition();
+
+    final Object[] items = new Object[100];
+
+    int put, take, count = 0;
+
+    public void produce(Object x) throws InterruptedException {
+        lock.lock();
+        try {
+            while (count == items.length)
+                notFull.await();  // 队列已满，等待，直到 not full 才能继续生产
+            items[put] = x;
+            if (++put == items.length) put = 0;
+            ++count;
+            notEmpty.signal(); // 生产成功，队列已经 not empty 了，发个通知出去
+        } finally {
+            lock.unlock();
+        }
+    }
+
+    public Object consumer() throws InterruptedException {
+        lock.lock();
+        try {
+            while (count == 0)
+                notEmpty.await(); // 队列为空，等待，直到队列 not empty，才能继续消费
+            Object x = items[take];
+            if (++take == items.length) take = 0;
+            --count;
+            notFull.signal(); // 被我消费掉一个，队列 not full 了，发个通知出去
+            return x;
+        } finally {
+            lock.unlock();
+        }
+    }
+
+}
+~~~
+
+
+
+
+
+
+
+## 概述
 
 ~~~java
  public static void main(String[] args) {
@@ -13,24 +65,28 @@
         Condition condition = reentrantLock.newCondition();
 		...
     }
-
+	// ReentranctLock中的方法，实际是调用了sync的newCondition
     public Condition newCondition() {
         return sync.newCondition();
     }
-~~~
+	// sync中的newCondition实际是调用了
+    final ConditionObject newCondition() {
+        return new ConditionObject();
+    }
 
 
-
-
-
-~~~JAVA
-
-
-package java.util.concurrent.locks;
-
-import java.util.Date;
-import java.util.concurrent.TimeUnit;
-
+public abstract class AbstractQueuedSynchronizer extends AbstractOwnableSynchronizer implement java.io.Serializable {
+    ...
+    // 每个condition对象上，都会阻塞多个线程。因此，其内部有一个双向链表组成的队列
+    public class ConditionObject implements Condition, java.io.Serializable {
+        /** First node of condition queue. */
+        private transient Node firstWaiter;
+        /** Last node of condition queue. */
+        private transient Node lastWaiter;
+        
+    }
+    ...
+}
 
 public interface Condition {
 
@@ -48,26 +104,6 @@ public interface Condition {
     
     void signalAll();
 }
-
-
-   public class ConditionObject implements Condition, java.io.Serializable {
-        private static final long serialVersionUID = 1173984872572414699L;
-        /** First node of condition queue. */
-        // 条件队列的第一个节点
-        private transient Node firstWaiter;
-        /** Last node of condition queue. */
-        // 条件队列的最后一个节点
-        private transient Node lastWaiter;
-
-        /**
-         * Creates a new {@code ConditionObject} instance.
-         */
-        public ConditionObject() { }
-
-        // Internal methods
-		......
-       
-    }
 
 ~~~
 
@@ -89,19 +125,7 @@ public interface Condition {
 ### 加入条件队列(wait queue)
 
 ~~~java
-   		/**
-         * Implements interruptible condition wait.
-         * <ol>
-         * <li>If current thread is interrupted, throw InterruptedException.
-         * <li>Save lock state returned by {@link #getState}.
-         * <li>Invoke {@link #release} with saved state as argument,
-         *     throwing IllegalMonitorStateException if it fails.
-         * <li>Block until signalled or interrupted.
-         * <li>Reacquire by invoking specialized version of
-         *     {@link #acquire} with saved state as argument.
-         * <li>If interrupted while blocked in step 4, throw InterruptedException.
-         * </ol>
-         */
+
 		// 如果当前线程被中断，会抛出异常(awaitUninterruptibly()此方法不怕中断)
 		// 阻塞线程直到signal或interrupt
         public final void await() throws InterruptedException {
@@ -110,11 +134,12 @@ public interface Condition {
                 throw new InterruptedException();
             // 将线程添加到等待队列中
             Node node = addConditionWaiter();
-            // await的前提是持有当前锁，进行await时需要释放锁并返回state值。
+            // await的前提是持有当前锁，进行await时需要释放锁并返回state值。否则会死锁
             int savedState = fullyRelease(node);
             int interruptMode = 0;
             // 如果isOnSyncQueue(node)返回true，说明当前node已经到阻塞队列中了
             // 如果线程中断，会进行break( checkInterruptWhileWaiting(node) != 0)
+            // 初始情况Node只会在Condition的队列中，执行notify操作时，node会放入AQS的队列中
             while (!isOnSyncQueue(node)) {
                 LockSupport.park(this);
                 if ((interruptMode = checkInterruptWhileWaiting(node)) != 0)
@@ -181,6 +206,14 @@ public interface Condition {
         }
 
 ~~~
+
+
+
+
+
+
+
+
 
 
 
