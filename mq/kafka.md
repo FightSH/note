@@ -1,3 +1,5 @@
+
+
 # Kafka
 
 一个多分区、多副本且基于 Zookeeper 协调的分布式消息系统。
@@ -16,4 +18,24 @@
 
 - Broker：服务代理节点。Broker可以简单的视为一个独立的 Kafka 服务节点或服务实例。
 - Topic：主题。Kafka中消息以主题为单位进行归类，生产者负责将消息发送到指定的 Topic 中，消费者订阅主题进行消费
-- Partition：分区。主题可细分为多个分区（主题是一个逻辑上的概念），它还可以细分为多个分区，一个 Partition 只属于单个 Topic。在同一个 Topic 下不通 Partition 包含的信息是不同的，Partition
+- Partition：分区。主题可细分为多个分区（主题是一个逻辑上的概念），它还可以细分为多个分区，一个 Partition 只属于单个 Topic。在同一个 Topic 下不同的 Partition 包含的信息是不同的。
+- Offset：偏移量。Patition 在存储层面可视为一个可追加的 log 文件，消息被追加到分区日志文件中时，会分配一个特定的偏移量(offset)。offset 是消息在分区中的唯一标识，Kafka通过它来保证消息在分区内的顺序性，但是 offset 并不跨越分区。即 **Kafka保证分区有序**。
+
+
+
+## 生产者
+
+消息对象 ProducerRecord 结构如下
+
+![image-20211224183706356](img/image-20211224183706356.png)
+
+- topic：代表信息要发往的主题
+- partition：代表信息要发往的分区
+- header：消息头，一般用来设定与应用相关的消息，可不设定
+- key：消息的键，可用来计算分区号让消息发往特定分区
+- value：消息体，一般不为空。
+- timestamp：时间戳
+
+
+
+消息在发向 broker 的过程中，一般会需要经过拦截器（Interceptor）、序列化器（Serializer）和分区器（Partitioner）
